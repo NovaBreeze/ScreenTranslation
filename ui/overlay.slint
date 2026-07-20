@@ -1,0 +1,111 @@
+export component OverlayWindow inherits Window {
+    title: "选择翻译区域";
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    width: 1280px;
+    height: 720px;
+    forward-focus: keyboard;
+
+    in-out property <length> sel-x: 0px;
+    in-out property <length> sel-y: 0px;
+    in-out property <length> sel-w: 0px;
+    in-out property <length> sel-h: 0px;
+    property <length> start-x: 0px;
+    property <length> start-y: 0px;
+    property <bool> dragging: false;
+
+    callback selected(float, float, float, float);
+    callback cancelled();
+
+    Rectangle { x: 0; y: 0; width: parent.width; height: root.sel-y; background: #00000088; }
+    Rectangle {
+        x: 0; y: root.sel-y + root.sel-h; width: parent.width;
+        height: parent.height - root.sel-y - root.sel-h; background: #00000088;
+    }
+    Rectangle { x: 0; y: root.sel-y; width: root.sel-x; height: root.sel-h; background: #00000088; }
+    Rectangle {
+        x: root.sel-x + root.sel-w; y: root.sel-y;
+        width: parent.width - root.sel-x - root.sel-w; height: root.sel-h; background: #00000088;
+    }
+
+    Rectangle {
+        x: root.sel-x; y: root.sel-y;
+        width: root.sel-w; height: root.sel-h;
+        border-color: #18a0fb;
+        border-width: 2px;
+    }
+
+    selection-area := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                root.cancelled();
+            } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.dragging = true;
+                root.start-x = self.mouse-x;
+                root.start-y = self.mouse-y;
+                root.sel-x = self.mouse-x;
+                root.sel-y = self.mouse-y;
+                root.sel-w = 0px;
+                root.sel-h = 0px;
+            } else if event.kind == PointerEventKind.up && root.dragging {
+                root.dragging = false;
+                if root.sel-w >= 8px && root.sel-h >= 8px {
+                    root.selected(root.sel-x / 1px, root.sel-y / 1px, root.sel-w / 1px, root.sel-h / 1px);
+                }
+            } else if event.kind == PointerEventKind.cancel {
+                root.dragging = false;
+            }
+        }
+        moved => {
+            if root.dragging {
+                root.sel-x = min(root.start-x, self.mouse-x);
+                root.sel-y = min(root.start-y, self.mouse-y);
+                root.sel-w = abs(self.mouse-x - root.start-x);
+                root.sel-h = abs(self.mouse-y - root.start-y);
+            }
+        }
+    }
+
+    keyboard := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    Rectangle {
+        x: 18px;
+        y: parent.height - 54px;
+        width: 380px;
+        height: 36px;
+        border-radius: 8px;
+        background: #111827dd;
+        Text {
+            text: "拖动鼠标框选区域，按右上角取消可退出";
+            color: white;
+            vertical-alignment: center;
+            x: 12px;
+        }
+    }
+
+    cancel-area := TouchArea {
+        x: parent.width - 58px;
+        y: 18px;
+        width: 40px;
+        height: 40px;
+        clicked => { root.cancelled(); }
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: 20px;
+            background: #111827dd;
+            Text { text: "×"; color: white; font-size: 28px; horizontal-alignment: center; vertical-alignment: center; }
+        }
+    }
+}

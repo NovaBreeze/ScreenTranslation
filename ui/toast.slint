@@ -1,0 +1,57 @@
+import { Button, HorizontalBox } from "std-widgets.slint";
+
+export component StatusToast inherits Window {
+    title: "状态通知";
+    width: 420px;
+    height: 72px;
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+
+    in-out property <string> message: "";
+    in-out property <string> tone: "info";
+    in-out property <string> action-label: "";
+    in-out property <bool> action-visible: action-label != "";
+
+    callback action-clicked();
+    callback dismiss-requested();
+
+    Rectangle {
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: root.tone == "error" ? #fda29b
+            : root.tone == "success" ? #75e0a7 : #84adff;
+        background: root.tone == "error" ? #fef3f2
+            : root.tone == "success" ? #ecfdf3 : #eff4ff;
+
+        HorizontalBox {
+            padding: 12px;
+            spacing: 10px;
+
+            Rectangle {
+                width: 6px;
+                border-radius: 3px;
+                background: root.tone == "error" ? #d92d20
+                    : root.tone == "success" ? #079455 : #2970ff;
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.message;
+                color: #182230;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+
+            Button {
+                visible: root.action-visible;
+                text: root.action-label;
+                clicked => { root.action-clicked(); }
+            }
+            Button {
+                text: "关闭";
+                clicked => { root.dismiss-requested(); }
+            }
+        }
+    }
+}

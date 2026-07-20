@@ -1,0 +1,33 @@
+export component AppTray inherits SystemTrayIcon {
+    icon: @image-url("../assets/icon.png");
+    tooltip: root.busy ? "截屏翻译：处理中" : "截屏翻译";
+    title: "截屏翻译";
+
+    in-out property <bool> busy: false;
+    callback capture();
+    callback open-settings();
+    callback open-history();
+    callback quit();
+
+    clicked => { root.capture(); }
+
+    Menu {
+        MenuItem {
+            title: root.busy ? "取消当前任务" : "截屏翻译";
+            activated => { root.capture(); }
+        }
+        MenuItem {
+            title: "设置";
+            activated => { root.open-settings(); }
+        }
+        MenuItem {
+            title: "历史记录";
+            activated => { root.open-history(); }
+        }
+        MenuSeparator {}
+        MenuItem {
+            title: "退出";
+            activated => { root.quit(); }
+        }
+    }
+}

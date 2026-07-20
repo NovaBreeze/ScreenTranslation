@@ -1,0 +1,108 @@
+import { Button, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+
+export component AboutWindow inherits Window {
+    title: "关于截屏翻译";
+    width: 520px;
+    height: 500px;
+    background: #f7f8fa;
+
+    in-out property <string> app-version: "";
+    in-out property <string> build-info: "";
+    in-out property <string> copyright-text: "";
+
+    callback open-privacy-policy();
+    callback open-third-party-licenses();
+    callback open-project-homepage();
+    callback close-requested();
+
+    VerticalBox {
+        padding: 18px;
+        spacing: 12px;
+
+        ScrollView {
+            vertical-stretch: 1;
+
+            VerticalBox {
+                width: parent.width;
+                padding: 10px;
+                spacing: 12px;
+
+                Text {
+                    text: "截屏翻译";
+                    color: #172033;
+                    font-size: 28px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: root.app-version == "" ? "版本信息未提供" : "版本 " + root.app-version;
+                    color: #667085;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "轻量、快捷的屏幕 OCR 与翻译工具";
+                    color: #344054;
+                    horizontal-alignment: center;
+                }
+
+                Rectangle { height: 1px; background: #e4e7ec; }
+
+                Text {
+                    text: "隐私说明";
+                    color: #344054;
+                    font-size: 17px;
+                    font-weight: 600;
+                }
+                Text {
+                    text: "截图和识别文本可能会发送到所选翻译或多模态服务。请勿处理密码、密钥、身份信息等敏感内容，并查看对应服务商的数据政策。";
+                    color: #475467;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: root.build-info;
+                    color: #667085;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: root.copyright-text;
+                    color: #667085;
+                    wrap: word-wrap;
+                }
+
+                HorizontalBox {
+                    spacing: 8px;
+                    Button {
+                        text: "隐私政策";
+                        clicked => { root.open-privacy-policy(); }
+                    }
+                    Button {
+                        text: "第三方许可";
+                        clicked => { root.open-third-party-licenses(); }
+                    }
+                    Button {
+                        text: "项目主页";
+                        clicked => { root.open-project-homepage(); }
+                    }
+                }
+
+                Rectangle { height: 1px; background: #e4e7ec; }
+
+                Text {
+                    text: "Made with Slint";
+                    color: #2970ff;
+                    font-size: 16px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        HorizontalBox {
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "关闭";
+                clicked => { root.close-requested(); }
+            }
+        }
+    }
+}

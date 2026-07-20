@@ -1,0 +1,130 @@
+import { Button, HorizontalBox, LineEdit, ListView, VerticalBox } from "std-widgets.slint";
+
+export struct HistoryItem {
+    id: int,
+    created-at: string,
+    source-text: string,
+    translated-text: string,
+}
+
+export component HistoryWindow inherits Window {
+    title: "翻译历史";
+    width: 820px;
+    height: 620px;
+    background: #f7f8fa;
+
+    in-out property <[HistoryItem]> entries: [];
+    in-out property <string> search-text: "";
+    in-out property <string> status-text: "";
+    in-out property <int> selected-id: -1;
+
+    callback search-changed(string);
+    callback entry-selected(int);
+    callback copy-source(int);
+    callback copy-translation(int);
+    callback clear-history();
+    callback export-history();
+    callback close-requested();
+
+    VerticalBox {
+        padding: 16px;
+        spacing: 12px;
+
+        HorizontalBox {
+            spacing: 8px;
+            Text {
+                text: "翻译历史";
+                color: #172033;
+                font-size: 24px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "导出";
+                clicked => { root.export-history(); }
+            }
+            Button {
+                text: "清空";
+                clicked => { root.clear-history(); }
+            }
+        }
+
+        LineEdit {
+            text <=> root.search-text;
+            placeholder-text: "搜索原文或译文";
+            edited => { root.search-changed(self.text); }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: white;
+            border-color: #d0d5dd;
+            border-width: 1px;
+            border-radius: 8px;
+
+            ListView {
+                for entry in root.entries : Rectangle {
+                    height: 124px;
+                    border-radius: 7px;
+                    border-width: entry.id == root.selected-id ? 2px : 1px;
+                    border-color: entry.id == root.selected-id ? #2970ff : #e4e7ec;
+                    background: entry.id == root.selected-id ? #eff4ff : #ffffff;
+
+                    TouchArea {
+                        clicked => {
+                            root.selected-id = entry.id;
+                            root.entry-selected(entry.id);
+                        }
+                    }
+
+                    VerticalBox {
+                        padding: 10px;
+                        spacing: 5px;
+                        Text {
+                            text: entry.created-at;
+                            color: #667085;
+                            font-size: 12px;
+                        }
+                        Text {
+                            text: entry.source-text;
+                            color: #344054;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: entry.translated-text;
+                            color: #101828;
+                            font-weight: 600;
+                            overflow: elide;
+                        }
+                        HorizontalBox {
+                            spacing: 6px;
+                            Rectangle { horizontal-stretch: 1; }
+                            Button {
+                                text: "复制原文";
+                                clicked => { root.copy-source(entry.id); }
+                            }
+                            Button {
+                                text: "复制译文";
+                                clicked => { root.copy-translation(entry.id); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalBox {
+            Text {
+                horizontal-stretch: 1;
+                text: root.entries.length == 0 ? "暂无历史记录" : root.status-text;
+                color: #667085;
+                vertical-alignment: center;
+            }
+            Button {
+                text: "关闭";
+                clicked => { root.close-requested(); }
+            }
+        }
+    }
+}

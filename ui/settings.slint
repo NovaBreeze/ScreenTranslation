@@ -1,0 +1,395 @@
+import {
+    Button, CheckBox, ComboBox, HorizontalBox, LineEdit, ScrollView, VerticalBox
+} from "std-widgets.slint";
+
+component SectionTitle inherits Text {
+    color: #344054;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+component FieldLabel inherits Text {
+    color: #475467;
+    font-size: 13px;
+}
+
+export component SettingsWindow inherits Window {
+    title: "截屏翻译设置";
+    width: 640px;
+    height: 720px;
+    background: #f6f7f9;
+
+    // General
+    in-out property <bool> launch-at-login: false;
+    in-out property <string> capture-shortcut: "Ctrl + Alt + T";
+    in-out property <bool> shortcut-recording: false;
+    in-out property <string> target-language: "简体中文";
+
+    // Translation service. Kept compatible with the existing Rust connection.
+    in-out property <string> translation-engine: "DeepSeek";
+    in-out property <string> service-preset: "DeepSeek";
+    in-out property <string> api-base: "https://api.deepseek.com/v1";
+    in-out property <string> api-key: "";
+    in-out property <string> model: "deepseek-v4-flash";
+    in-out property <string> proxy: "";
+    in-out property <string> ollama-host: "http://127.0.0.1:11434";
+    in-out property <bool> use-multimodal: false;
+
+    // OCR, display, clipboard and history.
+    in-out property <bool> ocr-prewarm: true;
+    in-out property <string> ocr-language: "自动检测";
+    in-out property <string> result-font-family: "系统默认";
+    in-out property <string> result-font-size: "16";
+    in-out property <color> result-text-color: #101828;
+    in-out property <color> result-background-color: #ffffff;
+    in-out property <string> result-text-color-hex: "#101828";
+    in-out property <string> result-background-color-hex: "#FFFFFF";
+    in-out property <bool> smart-result-colors: true;
+    in-out property <bool> copy-source: false;
+    in-out property <bool> copy-translation: false;
+    in-out property <bool> save-history: true;
+    in-out property <string> status-text: "就绪";
+    in-out property <bool> update-available: false;
+    in-out property <string> update-version: "";
+
+    callback start-capture();
+    callback save-settings();
+    callback cancel-settings();
+    callback test-connection();
+    callback record-shortcut();
+    callback reset-shortcut();
+    callback translation-engine-changed(string);
+    callback service-preset-changed(string);
+    callback prewarm-ocr();
+    callback open-history();
+    callback clear-history();
+    callback export-history();
+    callback open-privacy-policy();
+    callback open-third-party-licenses();
+    callback open-about();
+    callback check-for-updates();
+    callback install-update();
+
+    VerticalBox {
+        padding: 18px;
+        spacing: 12px;
+
+        HorizontalBox {
+            Text {
+                text: "截屏翻译";
+                color: #172033;
+                font-size: 27px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "开始截屏";
+                primary: true;
+                clicked => { root.start-capture(); }
+            }
+        }
+
+        Rectangle { height: 1px; background: #d9dee8; }
+
+        // Only this region scrolls; the action bar below always remains visible.
+        ScrollView {
+            vertical-stretch: 1;
+
+            VerticalBox {
+                width: parent.width;
+                padding: 8px;
+                spacing: 11px;
+
+                SectionTitle { text: "常规"; }
+                CheckBox {
+                    text: "登录 Windows 后自动启动";
+                    checked <=> root.launch-at-login;
+                }
+                FieldLabel { text: "截屏快捷键"; }
+                HorizontalBox {
+                    spacing: 8px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 34px;
+                        border-radius: 5px;
+                        border-width: 1px;
+                        border-color: root.shortcut-recording ? #2970ff : #d0d5dd;
+                        background: white;
+                        Text {
+                            x: 10px;
+                            text: root.shortcut-recording ? "请按下新的快捷键…" : root.capture-shortcut;
+                            color: root.shortcut-recording ? #175cd3 : #344054;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Button {
+                        text: root.shortcut-recording ? "录制中" : "录制";
+                        clicked => { root.record-shortcut(); }
+                    }
+                    Button {
+                        text: "恢复默认";
+                        clicked => { root.reset-shortcut(); }
+                    }
+                }
+
+                Rectangle { height: 1px; background: #e4e7ec; }
+
+                SectionTitle { text: "翻译引擎"; }
+                FieldLabel { text: "引擎"; }
+                ComboBox {
+                    model: ["DeepSeek", "OpenAI", "Ollama", "自定义 OpenAI 兼容"];
+                    current-index: root.translation-engine == "DeepSeek" ? 0
+                        : root.translation-engine == "OpenAI" ? 1
+                        : root.translation-engine == "Ollama" ? 2 : 3;
+                    selected(value) => {
+                        root.translation-engine = value;
+                        root.translation-engine-changed(value);
+                    }
+                }
+                FieldLabel { text: "服务预设"; }
+                ComboBox {
+                    model: ["DeepSeek", "OpenAI", "Ollama", "自定义"];
+                    current-index: root.service-preset == "DeepSeek" ? 0
+                        : root.service-preset == "OpenAI" ? 1
+                        : root.service-preset == "Ollama" ? 2 : 3;
+                    selected(value) => {
+                        root.service-preset = value;
+                        root.service-preset-changed(value);
+                    }
+                }
+                FieldLabel { text: "API 地址"; }
+                LineEdit {
+                    text <=> root.api-base;
+                    placeholder-text: "https://api.deepseek.com/v1";
+                }
+                FieldLabel { text: "API Key（保存后由 Windows DPAPI 加密）"; }
+                LineEdit {
+                    text <=> root.api-key;
+                    input-type: password;
+                    placeholder-text: "sk-...";
+                }
+                FieldLabel { text: "模型"; }
+                LineEdit {
+                    text <=> root.model;
+                    placeholder-text: "deepseek-v4-flash / gpt-4.1-mini / llama3.2";
+                }
+                FieldLabel { text: "Ollama 地址"; }
+                LineEdit {
+                    enabled: root.translation-engine == "Ollama";
+                    text <=> root.ollama-host;
+                    placeholder-text: "http://127.0.0.1:11434";
+                }
+                FieldLabel { text: "目标语言"; }
+                ComboBox {
+                    model: ["简体中文", "繁體中文", "English", "日本語", "한국어"];
+                    current-index: root.target-language == "简体中文" ? 0
+                        : root.target-language == "繁體中文" ? 1
+                        : root.target-language == "English" ? 2
+                        : root.target-language == "日本語" ? 3 : 4;
+                    selected(value) => { root.target-language = value; }
+                }
+                FieldLabel { text: "代理（可留空）"; }
+                LineEdit {
+                    text <=> root.proxy;
+                    placeholder-text: "系统代理，例如 http://127.0.0.1:7890";
+                }
+                CheckBox {
+                    text: "低置信度时使用多模态 OCR 兜底";
+                    checked <=> root.use-multimodal;
+                }
+                Rectangle {
+                    visible: root.use-multimodal;
+                    height: 66px;
+                    border-radius: 7px;
+                    background: #fff4e5;
+                    border-color: #fec84b;
+                    border-width: 1px;
+                    Text {
+                        x: 10px;
+                        y: 8px;
+                        width: parent.width - 20px;
+                        text: "隐私提示：启用后，低置信度文字行的裁剪图会发送给所选第三方服务。请勿截取密码、密钥、身份信息等敏感内容。";
+                        color: #93370d;
+                        wrap: word-wrap;
+                    }
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    Button {
+                        text: "测试连接";
+                        clicked => { root.test-connection(); }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.status-text;
+                        color: #175cd3;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                Rectangle { height: 1px; background: #e4e7ec; }
+
+                SectionTitle { text: "OCR"; }
+                CheckBox {
+                    text: "启动后预热 OCR（首次截屏更快）";
+                    checked <=> root.ocr-prewarm;
+                }
+                FieldLabel { text: "识别语言"; }
+                ComboBox {
+                    model: ["自动检测", "简体中文 + English", "English", "日本語", "한국어"];
+                    current-index: root.ocr-language == "自动检测" ? 0
+                        : root.ocr-language == "简体中文 + English" ? 1
+                        : root.ocr-language == "English" ? 2
+                        : root.ocr-language == "日本語" ? 3 : 4;
+                    selected(value) => { root.ocr-language = value; }
+                }
+                Button {
+                    text: "立即预热 OCR";
+                    clicked => { root.prewarm-ocr(); }
+                }
+
+                Rectangle { height: 1px; background: #e4e7ec; }
+
+                SectionTitle { text: "结果外观"; }
+                CheckBox {
+                    text: "根据原图自动选择背景和文字颜色";
+                    checked <=> root.smart-result-colors;
+                }
+                FieldLabel { text: "字体"; }
+                ComboBox {
+                    model: ["系统默认", "Microsoft YaHei UI", "Segoe UI", "等宽字体"];
+                    current-index: root.result-font-family == "系统默认" ? 0
+                        : root.result-font-family == "Microsoft YaHei UI" ? 1
+                        : root.result-font-family == "Segoe UI" ? 2 : 3;
+                    selected(value) => { root.result-font-family = value; }
+                }
+                FieldLabel { text: "字号"; }
+                ComboBox {
+                    model: ["12", "14", "16", "18", "20", "24", "28"];
+                    current-index: root.result-font-size == "12" ? 0
+                        : root.result-font-size == "14" ? 1
+                        : root.result-font-size == "16" ? 2
+                        : root.result-font-size == "18" ? 3
+                        : root.result-font-size == "20" ? 4
+                        : root.result-font-size == "24" ? 5 : 6;
+                    selected(value) => { root.result-font-size = value; }
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    FieldLabel {
+                        width: 60px;
+                        text: "文字颜色";
+                        vertical-alignment: center;
+                    }
+                    Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 4px;
+                        border-color: #98a2b3;
+                        border-width: 1px;
+                        background: root.result-text-color;
+                    }
+                    LineEdit {
+                        horizontal-stretch: 1;
+                        enabled: !root.smart-result-colors;
+                        text <=> root.result-text-color-hex;
+                        placeholder-text: "#101828";
+                    }
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    FieldLabel {
+                        width: 60px;
+                        text: "背景颜色";
+                        vertical-alignment: center;
+                    }
+                    Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 4px;
+                        border-color: #98a2b3;
+                        border-width: 1px;
+                        background: root.result-background-color;
+                    }
+                    LineEdit {
+                        horizontal-stretch: 1;
+                        enabled: !root.smart-result-colors;
+                        text <=> root.result-background-color-hex;
+                        placeholder-text: "#FFFFFF";
+                    }
+                }
+
+                Rectangle { height: 1px; background: #e4e7ec; }
+
+                SectionTitle { text: "剪贴板与历史"; }
+                CheckBox { text: "截屏后复制原文"; checked <=> root.copy-source; }
+                CheckBox { text: "翻译后复制译文"; checked <=> root.copy-translation; }
+                CheckBox { text: "保留历史记录"; checked <=> root.save-history; }
+                HorizontalBox {
+                    spacing: 8px;
+                    Button { text: "查看历史"; clicked => { root.open-history(); } }
+                    Button { text: "导出历史"; clicked => { root.export-history(); } }
+                    Button { text: "清空历史"; clicked => { root.clear-history(); } }
+                }
+
+                Rectangle { height: 1px; background: #e4e7ec; }
+
+                SectionTitle { text: "隐私与关于"; }
+                Text {
+                    text: "OCR 默认在本机运行；翻译内容是否上传取决于所选引擎。";
+                    color: #667085;
+                    wrap: word-wrap;
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    Button { text: "隐私说明"; clicked => { root.open-privacy-policy(); } }
+                    Button { text: "第三方许可"; clicked => { root.open-third-party-licenses(); } }
+                    Button { text: "关于"; clicked => { root.open-about(); } }
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    Button {
+                        text: "检查更新";
+                        clicked => { root.check-for-updates(); }
+                    }
+                    Button {
+                        visible: root.update-available;
+                        text: "安装 " + root.update-version;
+                        primary: true;
+                        clicked => { root.install-update(); }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: "GitHub: NovaBreeze/ScreenTranslation";
+                        color: #667085;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: #d9dee8; }
+
+        HorizontalBox {
+            spacing: 10px;
+            Text {
+                horizontal-stretch: 1;
+                text: root.status-text;
+                color: #667085;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Button {
+                text: "取消";
+                clicked => { root.cancel-settings(); }
+            }
+            Button {
+                text: "保存设置";
+                primary: true;
+                clicked => { root.save-settings(); }
+            }
+        }
+    }
+}
