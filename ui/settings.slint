@@ -1,5 +1,5 @@
 import {
-    Button, CheckBox, ComboBox, HorizontalBox, LineEdit, ScrollView, VerticalBox
+    Button, CheckBox, ComboBox, HorizontalBox, LineEdit, ListView, ScrollView, VerticalBox
 } from "std-widgets.slint";
 
 component SectionTitle inherits Text {
@@ -22,17 +22,19 @@ export component SettingsWindow inherits Window {
     // General
     in-out property <bool> launch-at-login: false;
     in-out property <string> capture-shortcut: "Ctrl + Alt + T";
-    in-out property <bool> shortcut-recording: false;
     in-out property <string> target-language: "简体中文";
 
-    // Translation service. Kept compatible with the existing Rust connection.
-    in-out property <string> translation-engine: "DeepSeek";
+    // Translation service. Provider list with per-provider preset/base/key/models;
+    // order defines the automatic fallback chain.
+    in-out property <[string]> provider-names: [];
+    in-out property <int> current-provider: 0;
+    in-out property <string> provider-name: "DeepSeek";
     in-out property <string> service-preset: "DeepSeek";
     in-out property <string> api-base: "https://api.deepseek.com/v1";
     in-out property <string> api-key: "";
-    in-out property <string> model: "deepseek-v4-flash";
+    in-out property <string> models: "deepseek-v4-flash";
+    in property <bool> provider-has-key: false;
     in-out property <string> proxy: "";
-    in-out property <string> ollama-host: "http://127.0.0.1:11434";
     in-out property <bool> use-multimodal: false;
 
     // OCR, display, clipboard and history.
@@ -56,10 +58,12 @@ export component SettingsWindow inherits Window {
     callback save-settings();
     callback cancel-settings();
     callback test-connection();
-    callback record-shortcut();
     callback reset-shortcut();
-    callback translation-engine-changed(string);
     callback service-preset-changed(string);
+    callback provider-selected(int);
+    callback add-provider();
+    callback remove-provider(int);
+    callback move-provider(int, int);
     callback prewarm-ocr();
     callback open-history();
     callback clear-history();
@@ -109,23 +113,11 @@ export component SettingsWindow inherits Window {
                 FieldLabel { text: "截屏快捷键"; }
                 HorizontalBox {
                     spacing: 8px;
-                    Rectangle {
+                    LineEdit {
                         horizontal-stretch: 1;
                         height: 34px;
-                        border-radius: 5px;
-                        border-width: 1px;
-                        border-color: root.shortcut-recording ? #2970ff : #d0d5dd;
-                        background: white;
-                        Text {
-                            x: 10px;
-                            text: root.shortcut-recording ? "请按下新的快捷键…" : root.capture-shortcut;
-                            color: root.shortcut-recording ? #175cd3 : #344054;
-                            vertical-alignment: center;
-                        }
-                    }
-                    Button {
-                        text: root.shortcut-recording ? "录制中" : "录制";
-                        clicked => { root.record-shortcut(); }
+                        text <=> root.capture-shortcut;
+                        placeholder-text: "如 Ctrl + Alt + T（重启后生效）";
                     }
                     Button {
                         text: "恢复默认";
@@ -135,24 +127,94 @@ export component SettingsWindow inherits Window {
 
                 Rectangle { height: 1px; background: #e4e7ec; }
 
-                SectionTitle { text: "翻译引擎"; }
-                FieldLabel { text: "引擎"; }
-                ComboBox {
-                    model: ["DeepSeek", "OpenAI", "Ollama", "自定义 OpenAI 兼容"];
-                    current-index: root.translation-engine == "DeepSeek" ? 0
-                        : root.translation-engine == "OpenAI" ? 1
-                        : root.translation-engine == "Ollama" ? 2 : 3;
-                    selected(value) => {
-                        root.translation-engine = value;
-                        root.translation-engine-changed(value);
+                SectionTitle { text: "翻译服务"; }
+                Text {
+                    text: "可添加多个供应商，每个供应商可配多个模型；翻译失败时按列表顺序自动回退。";
+                    color: #667085;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                Rectangle {
+                    height: 132px;
+                    border-radius: 8px;
+                    border-color: #d0d5dd;
+                    border-width: 1px;
+                    background: white;
+                    ListView {
+                        for name[idx] in root.provider-names: Rectangle {
+                            height: 32px;
+                            background: root.current-provider == idx ? #e3ecff : (row-touch.has-hover ? #f2f4f7 : transparent);
+                            row-touch := TouchArea {
+                                clicked => { root.provider-selected(idx); }
+                            }
+                            Text {
+                                x: 10px;
+                                text: name;
+                                color: #172033;
+                                font-size: 13px;
+                                vertical-alignment: center;
+                            }
+                            HorizontalLayout {
+                                x: parent.width - 102px;
+                                width: 98px;
+                                spacing: 3px;
+                                padding: 3px;
+                                Rectangle {
+                                    border-radius: 4px;
+                                    background: up-touch.has-hover ? #e4e7ec : transparent;
+                                    up-touch := TouchArea {
+                                        clicked => { root.move-provider(idx, -1); }
+                                    }
+                                    Text { text: "↑"; color: #475467; horizontal-alignment: center; vertical-alignment: center; }
+                                }
+                                Rectangle {
+                                    border-radius: 4px;
+                                    background: down-touch.has-hover ? #e4e7ec : transparent;
+                                    down-touch := TouchArea {
+                                        clicked => { root.move-provider(idx, 1); }
+                                    }
+                                    Text { text: "↓"; color: #475467; horizontal-alignment: center; vertical-alignment: center; }
+                                }
+                                Rectangle {
+                                    border-radius: 4px;
+                                    background: remove-touch.has-hover ? #fee4e2 : transparent;
+                                    remove-touch := TouchArea {
+                                        clicked => { root.remove-provider(idx); }
+                                    }
+                                    Text { text: "×"; color: #b42318; horizontal-alignment: center; vertical-alignment: center; }
+                                }
+                            }
+                        }
                     }
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    Button {
+                        text: "＋ 添加供应商";
+                        clicked => { root.add-provider(); }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: "列表顺序即回退优先级";
+                        color: #98a2b3;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                    }
+                }
+                FieldLabel { text: "名称"; }
+                LineEdit {
+                    text <=> root.provider-name;
+                    placeholder-text: "如 OpenCode Go";
                 }
                 FieldLabel { text: "服务预设"; }
                 ComboBox {
-                    model: ["DeepSeek", "OpenAI", "Ollama", "自定义"];
+                    model: ["DeepSeek", "OpenAI", "OpenCode Go", "OpenCode Zen 免费", "Ollama", "自定义"];
+                    // current-value 的程序化写入不改变选中项（slint#11970），用 current-index。
                     current-index: root.service-preset == "DeepSeek" ? 0
                         : root.service-preset == "OpenAI" ? 1
-                        : root.service-preset == "Ollama" ? 2 : 3;
+                        : root.service-preset == "OpenCode Go" ? 2
+                        : root.service-preset == "OpenCode Zen 免费" ? 3
+                        : root.service-preset == "Ollama" ? 4 : 5;
                     selected(value) => {
                         root.service-preset = value;
                         root.service-preset-changed(value);
@@ -161,24 +223,18 @@ export component SettingsWindow inherits Window {
                 FieldLabel { text: "API 地址"; }
                 LineEdit {
                     text <=> root.api-base;
-                    placeholder-text: "https://api.deepseek.com/v1";
+                    placeholder-text: "https://opencode.ai/zen/go/v1";
                 }
                 FieldLabel { text: "API Key（保存后由 Windows DPAPI 加密）"; }
                 LineEdit {
                     text <=> root.api-key;
                     input-type: password;
-                    placeholder-text: "sk-...";
+                    placeholder-text: root.provider-has-key ? "已保存，留空保持不变" : "sk-...";
                 }
-                FieldLabel { text: "模型"; }
+                FieldLabel { text: "模型（逗号分隔，按顺序回退）"; }
                 LineEdit {
-                    text <=> root.model;
-                    placeholder-text: "deepseek-v4-flash / gpt-4.1-mini / llama3.2";
-                }
-                FieldLabel { text: "Ollama 地址"; }
-                LineEdit {
-                    enabled: root.translation-engine == "Ollama";
-                    text <=> root.ollama-host;
-                    placeholder-text: "http://127.0.0.1:11434";
+                    text <=> root.models;
+                    placeholder-text: "big-pickle, mimo-v2.5-free";
                 }
                 FieldLabel { text: "目标语言"; }
                 ComboBox {

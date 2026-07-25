@@ -4,6 +4,7 @@ mod app;
 mod capture;
 mod config;
 mod history;
+mod logging;
 mod ocr;
 mod platform;
 mod render;
@@ -13,12 +14,7 @@ mod translate;
 slint::include_modules!();
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "screen_translator=info".into()),
-        )
-        .init();
+    logging::init();
 
     #[cfg(windows)]
     unsafe {

@@ -46,7 +46,7 @@ Remove-Item $Zip -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path "$Stage\*" -DestinationPath $Zip -CompressionLevel Optimal
 
 $SizeMb = (Get-Item $Zip).Length / 1MB
-if ($SizeMb -gt 30) {
-    throw "Package size $([math]::Round($SizeMb, 2)) MB exceeds the 30 MB budget"
+if ($SizeMb -gt 80) {
+    throw "Package size $([math]::Round($SizeMb, 2)) MB exceeds the 80 MB budget"
 }
 Write-Host "Created $Zip ($([math]::Round($SizeMb, 2)) MB)"

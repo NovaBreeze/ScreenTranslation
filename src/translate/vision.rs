@@ -1,4 +1,4 @@
-use crate::config::AppConfig;
+use crate::config::ProviderConfig;
 use anyhow::{Context, Result, anyhow, bail};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use image::{DynamicImage, ImageFormat};
@@ -6,13 +6,21 @@ use reqwest::{Client, Proxy, Url};
 use serde_json::{Value, json};
 use std::{io::Cursor, time::Duration};
 
-pub async fn recognize_text(image: &DynamicImage, config: &AppConfig) -> Result<String> {
-    let key = config
+pub async fn recognize_text(
+    image: &DynamicImage,
+    provider: &ProviderConfig,
+    proxy: Option<&str>,
+) -> Result<String> {
+    let key = provider
         .api_key()?
-        .ok_or_else(|| anyhow!("尚未配置多模态 API Key"))?;
-    let endpoint = normalize_endpoint(&config.api_base)?;
+        .ok_or_else(|| anyhow!("供应商「{}」未配置多模态 API Key", provider.display_name()))?;
+    let model = provider
+        .models
+        .first()
+        .ok_or_else(|| anyhow!("供应商「{}」未配置模型", provider.display_name()))?;
+    let endpoint = normalize_endpoint(&provider.api_base)?;
     let mut builder = Client::builder().timeout(Duration::from_secs(45));
-    if let Some(proxy) = config.proxy.as_deref().filter(|value| !value.is_empty()) {
+    if let Some(proxy) = proxy.filter(|value| !value.is_empty()) {
         builder = builder.proxy(Proxy::all(proxy).context("多模态代理地址无效")?);
     }
 
@@ -22,7 +30,7 @@ pub async fn recognize_text(image: &DynamicImage, config: &AppConfig) -> Result<
         .context("编码多模态裁剪图失败")?;
     let data_url = format!("data:image/png;base64,{}", STANDARD.encode(png));
     let request = json!({
-        "model": config.model,
+        "model": model,
         "temperature": 0.0,
         "messages": [{
             "role": "user",

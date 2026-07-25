@@ -1,5 +1,14 @@
 # 故障排查
 
+## 查看运行日志
+
+日志写入 `%APPDATA%\ScreenTranslator\logs\screen-translator.log`，每次截屏的冻结帧会转储为同目录的
+`last-frame.png`。遇到“遮罩全黑/识别不到文字”时先看这两项：
+- `last-frame.png` 全黑或内容不对 → 截屏环节问题；
+- 帧正常但遮罩仍黑 → 渲染环节问题，请附日志反馈。
+
+默认级别 `info`，可用环境变量 `RUST_LOG=screen_translator=debug` 提高详细程度。
+
 ## 提示缺少 OCR 模型
 
 确认 `assets/ocr/` 中存在 det、rec、`pp-lcnet_x0_25_textline_ori.onnx` 和 `ppocr_keys_v4.txt`。

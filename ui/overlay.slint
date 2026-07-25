@@ -2,10 +2,28 @@ export component OverlayWindow inherits Window {
     title: "选择翻译区域";
     no-frame: true;
     always-on-top: true;
-    background: transparent;
-    width: 1280px;
-    height: 720px;
+    // 冻结帧方案：窗口不透明，底图是进入选区前截取的全屏帧。
+    // 不依赖窗口透明（软件渲染器/远程桌面下透明会退化成全黑）。
+    background: black;
+    // Do NOT set width/height here. A constant binding like `width: 100px` permanently
+    // overrides Window::set_size() and leaves the overlay stuck in a tiny corner.
     forward-focus: keyboard;
+
+    // 冻结帧（物理像素整屏截图），由 Rust 侧在显示前设置。
+    in property <image> frame-image;
+    // 底部提示条文本；选区/识别/翻译进度与结果提示都写在这里。
+    in property <string> status-text: "拖动框选 · Esc / 右键 / × 取消";
+    // 选区确认后置 true：禁止再次拖选，遮罩转为结果展示层。
+    in property <bool> locked: false;
+    // 结果态工具栏：翻译完成后可切换原文/译文、一键复制当前显示的文本。
+    in property <bool> has-result: false;
+    in-out property <bool> show-original: false;
+    // 失败提示：非空时在选框下方显示提示条（与结果工具条同位）。
+    // 不弹独立窗口，Esc/右键/× 直接关遮罩，也可重新拖选。
+    in property <string> notice-text: "";
+
+    callback view-toggled(bool);
+    callback copy-requested();
 
     in-out property <length> sel-x: 0px;
     in-out property <length> sel-y: 0px;
@@ -15,34 +33,81 @@ export component OverlayWindow inherits Window {
     property <length> start-y: 0px;
     property <bool> dragging: false;
 
+    // 结果态/识别中也可重新拖选：锁定态按下左键时通知 Rust 取消旧任务、
+    // 恢复原始冻结帧，然后走正常拖选流程，松开后重新识别。
+    callback reselect-started();
     callback selected(float, float, float, float);
     callback cancelled();
 
-    Rectangle { x: 0; y: 0; width: parent.width; height: root.sel-y; background: #00000088; }
-    Rectangle {
-        x: 0; y: root.sel-y + root.sel-h; width: parent.width;
-        height: parent.height - root.sel-y - root.sel-h; background: #00000088;
-    }
-    Rectangle { x: 0; y: root.sel-y; width: root.sel-x; height: root.sel-h; background: #00000088; }
-    Rectangle {
-        x: root.sel-x + root.sel-w; y: root.sel-y;
-        width: parent.width - root.sel-x - root.sel-w; height: root.sel-h; background: #00000088;
+    init => {
+        keyboard.focus();
     }
 
-    Rectangle {
-        x: root.sel-x; y: root.sel-y;
-        width: root.sel-w; height: root.sel-h;
+    keyboard := FocusScope {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // 冻结帧底图（亮图，选区“洞”里显示的就是它）
+    Image {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        source: root.frame-image;
+        image-fit: fill;
+    }
+
+    // 整屏压暗层：静态元素，拖动选区时不参与重绘
+    Rectangle { x: 0; y: 0; width: root.width; height: root.height; background: #00000088; }
+
+    // 选区“洞”：裁剪容器内放同一张亮图并反向偏移，
+    // 重绘范围仅限选区新旧矩形，避免整屏重绘导致的黑闪。
+    hole := Rectangle {
+        x: root.sel-x;
+        y: root.sel-y;
+        width: root.sel-w;
+        height: root.sel-h;
+        clip: true;
         border-color: #18a0fb;
         border-width: 2px;
+        Image {
+            x: -root.sel-x;
+            y: -root.sel-y;
+            width: root.width;
+            height: root.height;
+            source: root.frame-image;
+            image-fit: fill;
+        }
     }
 
     selection-area := TouchArea {
-        width: parent.width;
-        height: parent.height;
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
         pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+            if event.kind == PointerEventKind.move {
+                // moved 回调仅在按住拖动时触发；悬停跟踪必须走 pointer-event。
+                root.cursor-x = self.mouse-x;
+                root.cursor-y = self.mouse-y;
+            } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
                 root.cancelled();
             } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                keyboard.focus();
+                if root.locked {
+                    root.reselect_started();
+                }
                 root.dragging = true;
                 root.start-x = self.mouse-x;
                 root.start-y = self.mouse-y;
@@ -60,6 +125,8 @@ export component OverlayWindow inherits Window {
             }
         }
         moved => {
+            root.cursor-x = self.mouse-x;
+            root.cursor-y = self.mouse-y;
             if root.dragging {
                 root.sel-x = min(root.start-x, self.mouse-x);
                 root.sel-y = min(root.start-y, self.mouse-y);
@@ -69,33 +136,130 @@ export component OverlayWindow inherits Window {
         }
     }
 
-    keyboard := FocusScope {
-        key-pressed(event) => {
-            if event.text == Key.Escape {
-                root.cancelled();
-                return accept;
-            }
-            reject
+    // 底部帮助提示条。鼠标进入提示条区域时隐藏（用户正要框选该区域），
+    // 移开后恢复；提示条无 TouchArea，指针事件穿透到 selection-area，可直接拖选。
+    property <length> help-x: 18px;
+    property <length> help-w: 520px;
+    property <length> help-h: 48px;
+    property <length> help-y: root.height - root.help-h - 18px;
+    property <length> cursor-x: -1000px;
+    property <length> cursor-y: -1000px;
+    property <bool> help-hovered: selection-area.has-hover
+        && root.cursor-x >= root.help-x && root.cursor-x <= root.help-x + root.help-w
+        && root.cursor-y >= root.help-y && root.cursor-y <= root.help-y + root.help-h;
+    // 暴露给无头渲染测试断言悬停隐藏。
+    out property <bool> help-shown: !root.help-hovered;
+    Rectangle {
+        visible: !root.help-hovered;
+        x: root.help-x;
+        y: root.help-y;
+        width: root.help-w;
+        height: root.help-h;
+        border-radius: 10px;
+        background: #111827dd;
+        Text {
+            text: root.status-text;
+            color: white;
+            font-size: 16px;
+            vertical-alignment: center;
+            x: 14px;
+            width: parent.width - 28px;
         }
     }
 
+    // 结果工具条：一整条分段控件（切换原文/译文 | 复制 | 关闭），
+    // 复制内容跟随当前显示态，关闭等同 Esc。clip 让两端分段的悬停高亮沿圆角裁切。
+    // 放在选框正下方 8px；下方贴底时翻到选框上方，左右贴边时向屏内收敛。
+    property <length> toolbar-w: 252px;
+    property <length> toolbar-h: 40px;
     Rectangle {
-        x: 18px;
-        y: parent.height - 54px;
-        width: 380px;
-        height: 36px;
-        border-radius: 8px;
+        visible: root.locked && root.has-result;
+        x: min(max(8px, root.sel-x + root.sel-w - root.toolbar-w), root.width - root.toolbar-w - 8px);
+        y: max(8px, root.sel-y + root.sel-h + 8px + root.toolbar-h > root.height
+            ? root.sel-y - root.toolbar-h - 8px
+            : root.sel-y + root.sel-h + 8px);
+        width: root.toolbar-w;
+        height: root.toolbar-h;
+        border-radius: 20px;
+        background: #111827dd;
+        clip: true;
+        HorizontalLayout {
+            padding: 0;
+            spacing: 0;
+            Rectangle {
+                background: toggle-touch.pressed ? #4b556388 : (toggle-touch.has-hover ? #37415188 : transparent);
+                toggle-touch := TouchArea {
+                    clicked => {
+                        root.show-original = !root.show-original;
+                        root.view-toggled(root.show-original);
+                    }
+                }
+                Text {
+                    text: root.show-original ? "显示：原文" : "显示：译文";
+                    color: white;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle { width: 1px; background: #ffffff26; }
+            Rectangle {
+                width: 64px;
+                background: copy-touch.pressed ? #4b556388 : (copy-touch.has-hover ? #37415188 : transparent);
+                copy-touch := TouchArea {
+                    clicked => { root.copy-requested(); }
+                }
+                Text {
+                    text: "复制";
+                    color: white;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle { width: 1px; background: #ffffff26; }
+            Rectangle {
+                width: 44px;
+                background: close-touch.pressed ? #b91c1ccc : (close-touch.has-hover ? #991b1bcc : transparent);
+                close-touch := TouchArea {
+                    clicked => { root.cancelled(); }
+                }
+                Text {
+                    text: "×";
+                    color: white;
+                    font-size: 18px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    // 失败提示条：与结果工具条同一位置（选框下方 8px，贴底翻上方）。
+    property <length> notice-w: 340px;
+    Rectangle {
+        visible: root.notice-text != "";
+        x: min(max(8px, root.sel-x + root.sel-w - root.notice-w), root.width - root.notice-w - 8px);
+        y: max(8px, root.sel-y + root.sel-h + 8px + root.toolbar-h > root.height
+            ? root.sel-y - root.toolbar-h - 8px
+            : root.sel-y + root.sel-h + 8px);
+        width: root.notice-w;
+        height: root.toolbar-h;
+        border-radius: 20px;
         background: #111827dd;
         Text {
-            text: "拖动鼠标框选区域，按右上角取消可退出";
-            color: white;
+            text: root.notice-text;
+            color: #fca5a5;
+            font-size: 14px;
+            horizontal-alignment: center;
             vertical-alignment: center;
-            x: 12px;
+            x: 14px;
+            width: parent.width - 28px;
         }
     }
 
     cancel-area := TouchArea {
-        x: parent.width - 58px;
+        x: root.width - 58px;
         y: 18px;
         width: 40px;
         height: 40px;

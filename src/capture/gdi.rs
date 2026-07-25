@@ -8,7 +8,7 @@ use windows::Win32::{
         BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC,
         DIB_RGB_COLORS, DeleteDC, DeleteObject, EnumDisplayMonitors, GetDC, GetDIBits,
         GetMonitorInfoW, HDC, HGDIOBJ, HMONITOR, MONITOR_DEFAULTTOPRIMARY, MONITORINFO,
-        MonitorFromPoint, ReleaseDC, SRCCOPY, SelectObject,
+        MONITORINFOEXW, MonitorFromPoint, ReleaseDC, SRCCOPY, SelectObject,
     },
     UI::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
@@ -16,9 +16,10 @@ use windows::Win32::{
     },
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct DisplayInfo {
-    pub index: usize,
+    /// GDI 设备名（如 `\\.\DISPLAY1`），用于与 DXGI 输出匹配。
+    pub device_name: String,
     pub x: i32,
     pub y: i32,
     pub width: u32,
@@ -121,9 +122,9 @@ fn display_for_point(point: POINT) -> DisplayInfo {
         .into_iter()
         .enumerate()
         .find(|(_, (handle, _))| *handle == target)
-        .map(|(index, (handle, rect))| display_info(index, handle, rect))
+        .map(|(_, (handle, rect))| display_info(handle, rect))
         .unwrap_or(DisplayInfo {
-            index: 0,
+            device_name: String::new(),
             x: 0,
             y: 0,
             width: 1280,
@@ -133,19 +134,36 @@ fn display_for_point(point: POINT) -> DisplayInfo {
 }
 
 #[cfg(windows)]
-fn display_info(index: usize, monitor: HMONITOR, rect: RECT) -> DisplayInfo {
+fn display_info(monitor: HMONITOR, rect: RECT) -> DisplayInfo {
     let mut dpi_x = 96;
     let mut dpi_y = 96;
     unsafe {
         let _ = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
     }
+    let mut info = MONITORINFOEXW {
+        monitorInfo: Default::default(),
+        szDevice: [0; 32],
+    };
+    info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+    let device_name = if unsafe { GetMonitorInfoW(monitor, std::ptr::from_mut(&mut info).cast()) }
+        .as_bool()
+    {
+        let end = info
+            .szDevice
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(info.szDevice.len());
+        String::from_utf16_lossy(&info.szDevice[..end])
+    } else {
+        String::new()
+    };
     DisplayInfo {
-        index,
+        device_name,
         x: rect.left,
         y: rect.top,
         width: (rect.right - rect.left).max(1) as u32,
         height: (rect.bottom - rect.top).max(1) as u32,
-        scale_factor: (dpi_x.max(dpi_y) as f32 / 96.0).max(1.0),
+        scale_factor: (dpi_x as f32 / 96.0).max(1.0),
     }
 }
 
@@ -183,7 +201,7 @@ fn enumerate_monitors() -> Vec<(HMONITOR, RECT)> {
 #[cfg(not(windows))]
 pub fn display_under_cursor() -> DisplayInfo {
     DisplayInfo {
-        index: 0,
+        device_name: String::new(),
         x: 0,
         y: 0,
         width: 1280,

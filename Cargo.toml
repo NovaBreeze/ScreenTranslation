@@ -13,13 +13,14 @@ eventsource-stream = "0.2.3"
 futures = "0.3.33"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 oar-ocr = { version = "0.8.0", default-features = false, features = ["simd"] }
+raw-window-handle-06 = { version = "0.6", package = "raw-window-handle" }
 ort = { version = "2.0.0-rc.12", default-features = false, features = ["api-20", "load-dynamic", "ndarray", "tracing"] }
 reqwest = { version = "0.13.4", default-features = false, features = ["stream", "json", "socks", "rustls", "system-proxy"] }
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 single-instance = "0.3.3"
-slint = "1.17"
+slint = { version = "1.17", features = ["raw-window-handle-06"] }
 thiserror = "2.0.19"
 tokio = { version = "1.53.0", default-features = false, features = ["rt-multi-thread", "macros", "time", "sync"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
@@ -33,7 +34,7 @@ slint-build = "1.17"
 
 [target."cfg(windows)".dependencies]
 dxgi-capture-rs = "1.2.2"
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_Security_Cryptography", "Win32_UI_HiDpi", "Win32_System_Memory"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_Security_Cryptography", "Win32_UI_HiDpi", "Win32_System_Memory", "Win32_System_Time", "Win32_System_Threading", "Win32_Graphics_Dwm"] }
 
 [profile.release]
 opt-level = "z"

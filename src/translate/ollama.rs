@@ -307,12 +307,19 @@ impl OllamaTranslator {
         Ok(OllamaRequest {
             model,
             stream,
+            think: false,
             messages: vec![
                 OllamaMessage {
                     role: "system",
                     content: format!(
                         "Translate every numbered item into {target_lang}. Return exactly the same \
-                         <N> markers, in order, without analysis or <think> blocks."
+                         <N> markers, in order, without analysis or <think> blocks. Keep only \
+                         proper nouns and literal code untranslated: product and brand names, \
+                         library, framework, and programming-language names, acronyms (e.g. API, \
+                         SDK, GPU), code identifiers, file paths, and shell commands. Translate \
+                         all ordinary words—including common technical vocabulary such as \
+                         'embedded' or 'command'—and translate a standalone word as a dictionary \
+                         entry."
                     ),
                 },
                 OllamaMessage {
@@ -358,6 +365,9 @@ pub fn normalize_ollama_chat_url(api_base: &str) -> Result<Url> {
 struct OllamaRequest<'a> {
     model: &'a str,
     stream: bool,
+    /// 关闭本地思考模型的 think 阶段（qwen3 等）：翻译不需要推理，
+    /// think 只是白等。非思考模型/旧版 Ollama 忽略该字段。
+    think: bool,
     messages: Vec<OllamaMessage>,
 }
 
@@ -410,6 +420,17 @@ mod tests {
         );
         lines.extend(parser.finish());
         assert_eq!(lines, vec![(0, "one".into()), (1, "two".into())]);
+    }
+
+    #[test]
+    fn native_request_disables_think() {
+        let translator = OllamaTranslator::new("http://127.0.0.1:11434", "qwen3", "简体中文", None)
+            .expect("translator");
+        let request = translator
+            .native_request(&["hello".to_owned()], false)
+            .expect("request");
+        let json = serde_json::to_value(&request).expect("serialize");
+        assert_eq!(json["think"], false, "本地思考模型应关闭 think");
     }
 
     #[test]

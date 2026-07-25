@@ -42,8 +42,27 @@ pub fn load_font(preferred: Option<&str>) -> Result<FontArc> {
     anyhow::bail!("未找到可用字体，请放置 assets/fonts/SourceHanSansSC-subset.otf")
 }
 
-pub fn fit_font_size(font: &FontArc, text: &str, rect: Rect) -> f32 {
-    let mut size = (rect.height as f32 * 0.75).clamp(10.0, 64.0);
+/// 测量单行文本在给定字号下的前进宽度（宽度随字号近似线性）。
+pub fn single_line_width(font: &FontArc, text: &str, size: f32) -> f32 {
+    let scaled = font.as_scaled(PxScale::from(size));
+    text.chars()
+        .map(|ch| scaled.h_advance(font.glyph_id(ch)))
+        .sum()
+}
+
+/// 动态计算合适字号：取三者最小
+/// - 高度上限：框高 × 0.85（OCR 框常被 unclip 撑大，不能单独信任）
+/// - 行距上限：vertical_budget ÷ 1.25（相邻行的实际间距，防止行间重叠）
+/// - 宽度上限：单行放不下时按比例压缩；压缩到最小字号仍超宽则允许换行
+pub fn fit_font_size(font: &FontArc, text: &str, rect: Rect, vertical_budget: f32) -> f32 {
+    let height_cap = rect.height as f32 * 0.85;
+    let budget_cap = (vertical_budget / 1.25).max(10.0);
+    let mut size = height_cap.min(budget_cap).clamp(10.0, 64.0);
+    let width = single_line_width(font, text, size);
+    if width > rect.width.max(1) as f32 {
+        size = (size * rect.width.max(1) as f32 / width * 0.98).max(10.0);
+    }
+    // 压缩到最小字号仍超宽：允许换行（调用方会加高绘制框），沿用收缩循环。
     while size > 10.0 {
         let lines = wrap_lines(font, text, size, rect.width.max(1) as f32);
         if lines.len() as f32 * size * 1.25 <= rect.height.max(1) as f32 * 1.8 {
@@ -68,7 +87,10 @@ pub fn draw_text_wrapped(
 ) {
     let lines = wrap_lines(font, text, size, rect.width.max(1) as f32);
     let scale = PxScale::from(size);
-    let mut baseline = rect.y as f32 + size;
+    // 文字块在框内垂直居中：避免上对齐时下延部分越出框底。
+    let total_height = lines.len() as f32 * size * 1.2;
+    let top = rect.y as f32 + (rect.height as f32 - total_height).max(0.0) * 0.5;
+    let mut baseline = top + size;
     for line in lines {
         let mut x = rect.x as f32 + 2.0;
         for ch in line.chars() {

@@ -2,6 +2,24 @@
 
 Screen Translator 支持 OpenAI Chat Completions 兼容接口和 Ollama。
 
+## 多供应商与失败回退
+
+设置页可添加多个翻译供应商，每个供应商可填多个模型（逗号分隔）。
+翻译时按「供应商列表顺序 × 模型顺序」组成回退链：当前节点请求失败时自动
+切换到下一个节点；流式输出中途失败时，只对尚未译出的行切换，已译出的行
+保留。列表中可用 ↑ ↓ 调整优先级。
+
+## OpenCode Go / Zen
+
+OpenCode 的 Go 订阅与 Zen 按量/免费模型共用同一把 API Key（在
+[opencode.ai](https://opencode.ai/auth) 控制台创建），预设已内置：
+
+- OpenCode Go：`https://opencode.ai/zen/go/v1`，如 `deepseek-v4-flash`、`glm-5.1`
+- OpenCode Zen 免费：`https://opencode.ai/zen/v1`，如 `big-pickle`、
+  `mimo-v2.5-free`、`deepseek-v4-flash-free`
+
+注意：免费模型的用量数据可能被 OpenCode 用于改进模型，请勿截取敏感内容。
+
 ## OpenAI 兼容接口
 
 填写 API 根地址即可，应用会自动补全 `/chat/completions`：
