@@ -964,6 +964,7 @@ fn install_capture_handler(
         let current_task = Arc::clone(&current_task);
         let previous_foreground = Arc::clone(&previous_foreground);
         let config = Arc::clone(&config);
+        let ocr = Arc::clone(&ocr);
         settings.on_start_capture(move || {
             let Some(settings) = settings_weak.upgrade() else {
                 return;
@@ -976,6 +977,7 @@ fn install_capture_handler(
                 {
                     park_overlay(overlay);
                     foreground::restore(previous_foreground.swap(0, Ordering::SeqCst));
+                    *capture_ctx.borrow_mut() = None;
                 }
                 settings.set_status_text("正在取消当前任务…".into());
                 return;
@@ -990,6 +992,13 @@ fn install_capture_handler(
                     // 仍在框选阶段：热键视为取消选区。
                     foreground::restore(previous_foreground.swap(0, Ordering::SeqCst));
                     settings.set_status_text("已取消选区".into());
+                    // 热键预热的模型用不上了，卸载归还内存（worker 在跑则拿不到
+                    // 锁，由流水线结束兜底卸载）。
+                    if let Ok(mut engine) = ocr.try_lock() {
+                        engine.unload();
+                    }
+                    // 冻结帧（8MB+）不再使用，随取消一并释放。
+                    *capture_ctx.borrow_mut() = None;
                     return;
                 }
                 // 结果展示态：收起旧结果后延时重新进入截屏——
@@ -1038,6 +1047,16 @@ fn install_capture_handler(
                         }
                     });
                 }
+            }
+            // OCR 模型预热：会话在每次流水线结束后即卸载（见 worker 线程），
+            // 重载约 0.4s 藏进拖选时间，识别开始时模型已就绪。
+            {
+                let ocr = Arc::clone(&ocr);
+                thread::spawn(move || {
+                    if let Ok(mut engine) = ocr.lock() {
+                        let _ = engine.prewarm();
+                    }
+                });
             }
             let Some(overlay) = overlay_slot.borrow().as_ref().map(|o| o.clone_strong()) else {
                 // 预热失败等极端情况下才走到这里。
@@ -1130,6 +1149,7 @@ fn install_capture_handler(
     // 重选处理器需在其移动前自备克隆。
     let reselect_task = Arc::clone(&current_task);
     let reselect_tray = tray.clone();
+    let ocr_for_cancel = Arc::clone(&ocr);
     {
         let selected_weak = overlay.as_weak();
         let settings_for_pipeline = settings.as_weak();
@@ -1220,6 +1240,12 @@ fn install_capture_handler(
                     overlay_for_thread.clone(),
                     settings_for_update.clone(),
                 );
+                // 推理结束即卸载 OCR 会话：ORT 会话持有全部推理缓冲（常驻时
+                // 进程私有内存顶在推理高水位不归还，实测大裁片两轮后 850MB），
+                // 卸载即全量归还；重载仅约 0.4s，由热键预热掩盖。
+                if let Ok(mut engine) = ocr_for_thread.lock() {
+                    engine.unload();
+                }
                 let was_cancelled = cancellation.is_cancelled();
                 let _ = slint::invoke_from_event_loop(move || {
                     // 代次过期（用户已重新拖选）：整体丢弃，不得取走新任务的
@@ -1327,7 +1353,16 @@ fn install_capture_handler(
         let overlay_for_restore = overlay.as_weak();
         let overlay_active = Arc::clone(&overlay_active);
         let previous_foreground = Arc::clone(&previous_foreground);
+        let capture_ctx = Rc::clone(&capture_ctx);
         overlay.on_cancelled(move || {
+            // 框选阶段取消（Esc/×/右键）：热键预热的模型用不上了，卸载归还
+            // 内存。worker 在跑则拿不到锁——流水线结束兜底卸载，不阻塞 UI。
+            if let Ok(mut engine) = ocr_for_cancel.try_lock() {
+                engine.unload();
+            }
+            // 遮罩已收起，冻结帧与结果图（各 8MB+）一并释放，不留到下次截屏。
+            *capture_ctx.borrow_mut() = None;
+            OVERLAY_RESULT.with(|state| *state.borrow_mut() = None);
             if let Some(overlay) = overlay_for_restore.upgrade() {
                 park_overlay(&overlay);
             }

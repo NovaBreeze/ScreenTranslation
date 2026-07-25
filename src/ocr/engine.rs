@@ -79,6 +79,13 @@ impl OcrEngine {
         Ok(())
     }
 
+    /// 卸载模型会话。ORT 会话持有全部推理缓冲（高水位只涨不还，实测常驻后
+    /// 进程私有内存顶在 100–800MB，drop 即全量归还）；重载仅约 0.4s，
+    /// 热键时在拖选期间后台重载即可，用户无感。
+    pub fn unload(&mut self) {
+        self.pipeline = None;
+    }
+
     pub fn recognize(&mut self, image: &DynamicImage) -> Result<Vec<TextBlock>> {
         self.prewarm()?;
         let pipeline = self.pipeline.as_ref().expect("OCR pipeline initialized");
@@ -677,6 +684,92 @@ mod tests {
         let blocks = engine.recognize(&image).expect("fixture OCR should run");
         assert!(!blocks.is_empty());
         assert!(blocks.iter().all(|block| block.confidence > 0.0));
+    }
+
+    /// 诊断：模型加载/反复推理的内存曲线（cargo test -- --ignored --nocapture）。
+    /// 判据：若 private bytes 随轮数线性增长 = 真泄漏；若第 1–2 轮冲高后稳定 =
+    /// ONNX Runtime arena / CRT 堆保留，属平台行为而非泄漏。
+    #[test]
+    #[ignore = "诊断用，打印内存曲线"]
+    fn memory_curve_probe() {
+        fn mem_mb() -> (f64, f64) {
+            use windows::Win32::System::ProcessStatus::{
+                GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
+            };
+            use windows::Win32::System::Threading::GetCurrentProcess;
+            unsafe {
+                let mut counters = PROCESS_MEMORY_COUNTERS_EX {
+                    cb: size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
+                    ..Default::default()
+                };
+                let _ = GetProcessMemoryInfo(
+                    GetCurrentProcess(),
+                    &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX
+                        as *mut PROCESS_MEMORY_COUNTERS,
+                    counters.cb,
+                );
+                (
+                    counters.PrivateUsage as f64 / 1048576.0,
+                    counters.WorkingSetSize as f64 / 1048576.0,
+                )
+            }
+        }
+        let frame = image::open(crate::logging::log_dir().join("last-frame.png"))
+            .expect("last-frame.png should exist");
+        let report = |tag: &str| {
+            let (private, ws) = mem_mb();
+            println!("{tag}: private={private:.1}MB ws={ws:.1}MB");
+        };
+        report("baseline");
+        let mut engine = OcrEngine::default();
+        engine.prewarm().expect("prewarm");
+        report("models loaded");
+        for round in 0..8 {
+            // 大小裁片交替：小裁片 960×260（日常选区），大裁片 1600×760（接近上限）
+            let (w, h) = if round % 2 == 0 {
+                (960, 260)
+            } else {
+                (1600, 760)
+            };
+            let crop = frame.crop_imm(10, 100, w.min(frame.width() - 10), h.min(frame.height() - 100));
+            let started = std::time::Instant::now();
+            let blocks = engine.recognize(&crop).expect("ocr").len();
+            let (private, ws) = mem_mb();
+            println!(
+                "round {round} ({w}x{h}): blocks={blocks} elapsed={}ms private={private:.1}MB ws={ws:.1}MB",
+                started.elapsed().as_millis()
+            );
+        }
+        drop(engine);
+        report("engine dropped");
+        unsafe {
+            use windows::Win32::System::ProcessStatus::EmptyWorkingSet;
+            use windows::Win32::System::Threading::GetCurrentProcess;
+            let _ = EmptyWorkingSet(GetCurrentProcess());
+        }
+        report("after EmptyWorkingSet");
+        unsafe {
+            use windows::Win32::System::Memory::{GetProcessHeap, HEAP_FLAGS, HeapCompact};
+            let released = HeapCompact(GetProcessHeap().unwrap(), HEAP_FLAGS(0));
+            println!("HeapCompact released={released} bytes");
+        }
+        report("after HeapCompact");
+        // 循环加载→推理→卸载：验证反复驱逐不泄漏，并测重载/首推理耗时。
+        for cycle in 0..3 {
+            let load_started = std::time::Instant::now();
+            let mut engine = OcrEngine::default();
+            engine.prewarm().expect("prewarm");
+            let load_ms = load_started.elapsed().as_millis();
+            let crop = frame.crop_imm(10, 100, 960, 260);
+            let infer_started = std::time::Instant::now();
+            let blocks = engine.recognize(&crop).expect("ocr").len();
+            let infer_ms = infer_started.elapsed().as_millis();
+            drop(engine);
+            let (private, ws) = mem_mb();
+            println!(
+                "cycle {cycle}: load={load_ms}ms infer={infer_ms}ms blocks={blocks} after-drop private={private:.1}MB ws={ws:.1}MB"
+            );
+        }
     }
 
     /// 诊断：真实屏幕文本的空格是否被识别保留（cargo test -- --ignored --nocapture）。

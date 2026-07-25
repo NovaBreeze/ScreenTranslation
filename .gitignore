@@ -4,3 +4,5 @@
 *.pdb
 *.log
 /target
+/probe/
+/installer/*.exe
