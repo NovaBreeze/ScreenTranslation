@@ -996,6 +996,7 @@ fn install_capture_handler(
                     // 锁，由流水线结束兜底卸载）。
                     if let Ok(mut engine) = ocr.try_lock() {
                         engine.unload();
+                        trim_working_set();
                     }
                     // 冻结帧（8MB+）不再使用，随取消一并释放。
                     *capture_ctx.borrow_mut() = None;
@@ -1246,6 +1247,7 @@ fn install_capture_handler(
                 if let Ok(mut engine) = ocr_for_thread.lock() {
                     engine.unload();
                 }
+                trim_working_set();
                 let was_cancelled = cancellation.is_cancelled();
                 let _ = slint::invoke_from_event_loop(move || {
                     // 代次过期（用户已重新拖选）：整体丢弃，不得取走新任务的
@@ -1359,6 +1361,7 @@ fn install_capture_handler(
             // 内存。worker 在跑则拿不到锁——流水线结束兜底卸载，不阻塞 UI。
             if let Ok(mut engine) = ocr_for_cancel.try_lock() {
                 engine.unload();
+                trim_working_set();
             }
             // 遮罩已收起，冻结帧与结果图（各 8MB+）一并释放，不留到下次截屏。
             *capture_ctx.borrow_mut() = None;
@@ -1451,6 +1454,18 @@ fn park_overlay(overlay: &OverlayWindow) {
     overlay
         .window()
         .set_position(slint::PhysicalPosition::new(-32000, -32000));
+}
+
+/// 推理/渲染高峰后主动把工作集还给系统：任务管理器的“内存”列立即回落，
+/// 而不是等 OS 在内存压力下懒回收。页面进 standby，下次使用软缺页召回，
+/// 开销可忽略。仅在空闲时调用（worker 在跑时调用会拖慢推理）。
+#[cfg(windows)]
+fn trim_working_set() {
+    use windows::Win32::System::ProcessStatus::EmptyWorkingSet;
+    use windows::Win32::System::Threading::GetCurrentProcess;
+    unsafe {
+        let _ = EmptyWorkingSet(GetCurrentProcess());
+    }
 }
 
 fn apply_overlay_geometry(overlay: &OverlayWindow, display: &DisplayInfo) {
