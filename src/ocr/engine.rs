@@ -129,16 +129,25 @@ impl OcrEngine {
             })
             .collect();
 
-        blocks.sort_by(|a, b| {
-            let aa = a.bounding_box();
-            let bb = b.bounding_box();
-            let row_tolerance = aa.height.max(bb.height) as f32 * 0.55;
-            if (aa.y as f32 - bb.y as f32).abs() <= row_tolerance {
-                aa.x.cmp(&bb.x)
+        // 阅读顺序：先按 y 排序后按行带聚类出行号，再按 (行号, x) 排序。
+        // 两两容差比较不满足传递性（a≈b、b≈c 但 a≉c），release 下 panic=abort
+        // 会直接闪退，这里必须用全序键。
+        blocks.sort_by_key(|block| block.bounding_box().y);
+        let mut tagged: Vec<(usize, TextBlock)> = Vec::with_capacity(blocks.len());
+        let mut row = 0usize;
+        let mut band_bottom = 0u32;
+        for block in blocks.drain(..) {
+            let rect = block.bounding_box();
+            if rect.y > band_bottom {
+                row += 1;
+                band_bottom = rect.y + rect.height;
             } else {
-                aa.y.cmp(&bb.y)
+                band_bottom = band_bottom.max(rect.y + rect.height);
             }
-        });
+            tagged.push((row, block));
+        }
+        tagged.sort_by_key(|(row, block)| (*row, block.bounding_box().x));
+        blocks.extend(tagged.into_iter().map(|(_, block)| block));
 
         // 几何空格重建：rec 模型对词间空格预测不稳定（同一行时有时无），
         // 按行图列投影把明显的墨水中断补回为空格。
