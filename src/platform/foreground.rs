@@ -31,10 +31,10 @@ pub fn hwnd_of(window: &slint::Window) -> isize {
 #[cfg(windows)]
 pub fn force_foreground(hwnd: isize) {
     use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::Input::KeyboardAndMouse::SetActiveWindow;
     use windows::Win32::UI::WindowsAndMessaging::{
         BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
     };
-    use windows::Win32::UI::Input::KeyboardAndMouse::SetActiveWindow;
     if hwnd == 0 {
         return;
     }

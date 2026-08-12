@@ -300,9 +300,8 @@ impl OpenAiTranslator {
         ChatRequest {
             model: &self.model,
             stream,
-            thinking: supports_thinking_toggle(&self.endpoint).then_some(Thinking {
-                r#type: "disabled",
-            }),
+            thinking: supports_thinking_toggle(&self.endpoint)
+                .then_some(Thinking { r#type: "disabled" }),
             messages: vec![
                 Message {
                     role: "system",
@@ -478,10 +477,14 @@ mod tests {
 
     #[test]
     fn thinking_not_sent_for_other_hosts() {
-        let translator = OpenAiTranslator::new("https://api.openai.com/v1", "sk-x", "gpt", "简体中文", None)
-            .expect("translator");
+        let translator =
+            OpenAiTranslator::new("https://api.openai.com/v1", "sk-x", "gpt", "简体中文", None)
+                .expect("translator");
         let request = translator.make_request(&["hello".to_owned()], false);
         let json = serde_json::to_value(&request).expect("serialize");
-        assert!(json.get("thinking").is_none(), "未知供应商不得发送 thinking");
+        assert!(
+            json.get("thinking").is_none(),
+            "未知供应商不得发送 thinking"
+        );
     }
 }

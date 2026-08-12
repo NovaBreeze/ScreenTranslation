@@ -6,8 +6,7 @@ use crate::{
     ocr::OcrEngine,
     platform::{
         autostart::Autostart,
-        foreground,
-        clipboard,
+        clipboard, foreground,
         hotkey::{Hotkey, HotkeyManager, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN},
         single::{InstanceCommand, SingleInstance},
         update::{self, UpdateInfo},
@@ -213,7 +212,8 @@ fn show_and_focus_settings(settings: &SettingsWindow) {
     }
 }
 
-fn parse_hotkey(value: &str) -> Option<Hotkey> {    let parts: Vec<String> = value
+fn parse_hotkey(value: &str) -> Option<Hotkey> {
+    let parts: Vec<String> = value
         .split('+')
         .map(|part| part.trim().to_ascii_uppercase())
         .filter(|part| !part.is_empty())
@@ -326,7 +326,11 @@ fn preset_of(draft: &ProviderDraft) -> &'static str {
     }
 }
 
-fn load_provider_fields(window: &SettingsWindow, drafts: &ProviderDrafts, editing: &Rc<Cell<usize>>) {
+fn load_provider_fields(
+    window: &SettingsWindow,
+    drafts: &ProviderDrafts,
+    editing: &Rc<Cell<usize>>,
+) {
     // 先复制出字段再调用 setter：持有 borrow 期间若 setter 同步触发任何
     // 读取 drafts 的回调会造成 RefCell 双重借用 panic。
     let Some((name, preset, base, models, has_key)) = ({
@@ -385,7 +389,11 @@ fn commit_provider_fields(
     window.set_api_key(SharedString::default());
 }
 
-fn refresh_provider_list(window: &SettingsWindow, drafts: &ProviderDrafts, editing: &Rc<Cell<usize>>) {
+fn refresh_provider_list(
+    window: &SettingsWindow,
+    drafts: &ProviderDrafts,
+    editing: &Rc<Cell<usize>>,
+) {
     let names: Vec<SharedString> = drafts
         .borrow()
         .iter()
@@ -715,7 +723,11 @@ fn install_settings_extras(
             return;
         };
         let (name, base, models) = match preset.as_str() {
-            "DeepSeek" => ("DeepSeek", "https://api.deepseek.com/v1", "deepseek-v4-flash"),
+            "DeepSeek" => (
+                "DeepSeek",
+                "https://api.deepseek.com/v1",
+                "deepseek-v4-flash",
+            ),
             "OpenAI" => ("OpenAI", "https://api.openai.com/v1", "gpt-4.1-mini"),
             "OpenCode Go" => (
                 "OpenCode Go",
@@ -733,7 +745,8 @@ fn install_settings_extras(
         window.set_api_base(base.into());
         window.set_models(models.into());
         let current = window.get_provider_name();
-        if current.trim().is_empty() || PRESETS.contains(&current.as_str()) || current == "新供应商" {
+        if current.trim().is_empty() || PRESETS.contains(&current.as_str()) || current == "新供应商"
+        {
             window.set_provider_name(name.into());
         }
         commit_provider_fields(&window, &preset_drafts, &preset_editing);
@@ -1215,7 +1228,11 @@ fn install_capture_handler(
                     return;
                 }
             };
-            tracing::info!(width = original.width(), height = original.height(), "selection cropped");
+            tracing::info!(
+                width = original.width(),
+                height = original.height(),
+                "selection cropped"
+            );
             let cancellation = CancellationToken::new();
             *task_for_thread.lock().expect("task lock") = Some(cancellation.clone());
             if let Some(tray) = tray.upgrade() {
@@ -1296,7 +1313,9 @@ fn install_capture_handler(
                                     park_overlay(&overlay);
                                 }
                                 active_for_thread.store(false, Ordering::SeqCst);
-                                foreground::restore(foreground_for_thread.swap(0, Ordering::SeqCst));
+                                foreground::restore(
+                                    foreground_for_thread.swap(0, Ordering::SeqCst),
+                                );
                                 if let Some(settings) = settings_for_update.upgrade() {
                                     settings.set_status_text("已取消".into());
                                 }
@@ -1428,9 +1447,7 @@ fn install_capture_handler(
 
     // 预热：首个 winit 窗口 show 时才初始化渲染上下文/表面，
     // 启动时即离屏显示并保持常驻，避免用户首次截屏时的首帧黑闪。
-    overlay
-        .window()
-        .set_size(slint::PhysicalSize::new(64, 64));
+    overlay.window().set_size(slint::PhysicalSize::new(64, 64));
     overlay
         .window()
         .set_position(slint::PhysicalPosition::new(-32000, -32000));
@@ -2145,7 +2162,12 @@ mod tests {
         let config = Arc::new(Mutex::new(initial));
         let drafts: ProviderDrafts = Rc::new(RefCell::new(Vec::new()));
         let editing = Rc::new(Cell::new(0usize));
-        apply_config(&window, &config.lock().expect("config lock"), &drafts, &editing);
+        apply_config(
+            &window,
+            &config.lock().expect("config lock"),
+            &drafts,
+            &editing,
+        );
         install_save_handler(
             &window,
             Arc::clone(&config),
@@ -2194,7 +2216,8 @@ mod tests {
     }
 
     #[test]
-    fn create_translator_fails_when_nothing_usable() {        let mut config = AppConfig::default();
+    fn create_translator_fails_when_nothing_usable() {
+        let mut config = AppConfig::default();
         config.providers = vec![ProviderConfig {
             name: "无key".into(),
             engine: TranslationEngine::OpenAiCompatible,
@@ -2224,8 +2247,7 @@ mod tests {
             width: 967.0,
             height: 72.0,
         };
-        let (ocr_selection, content) =
-            expand_for_ocr(selection, frame.width(), frame.height());
+        let (ocr_selection, content) = expand_for_ocr(selection, frame.width(), frame.height());
         let crop = crate::capture::crop_selection(&frame, ocr_selection).expect("crop");
         let raw = crate::ocr::OcrEngine::default()
             .recognize(&crop)

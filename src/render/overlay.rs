@@ -263,8 +263,14 @@ mod tests {
             polygon: vec![
                 Point { x: 40.0, y },
                 Point { x: 900.0, y },
-                Point { x: 900.0, y: y + 28.0 },
-                Point { x: 40.0, y: y + 28.0 },
+                Point {
+                    x: 900.0,
+                    y: y + 28.0,
+                },
+                Point {
+                    x: 40.0,
+                    y: y + 28.0,
+                },
             ],
             word_boxes: Vec::new(),
             confidence: 0.99,
@@ -276,10 +282,7 @@ mod tests {
         ];
         // 紧间距组：模拟 unclip 后框互相重叠的 OCR 输出（pitch < 框高），
         // 行距预算应压住字号，渲染行不得重叠。
-        let tight = vec![
-            make_block(170.0, "line one"),
-            make_block(194.0, "line two"),
-        ];
+        let tight = vec![make_block(170.0, "line one"), make_block(194.0, "line two")];
         let translations = vec![
             "欢迎来到 Nushell，这里是一个全新的 Shell".to_string(),
             "基于 nu 语言，".to_string(),
@@ -297,9 +300,17 @@ mod tests {
     #[test]
     fn font_size_respects_vertical_budget() {
         let font = load_font(None).expect("font");
-        let rect = Rect { x: 0, y: 0, width: 800, height: 28 };
+        let rect = Rect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 28,
+        };
         let capped = fit_font_size(&font, "短句", rect, 20.0);
-        assert!(capped * 1.25 <= 20.0 + f32::EPSILON, "size {capped} 超出行距预算");
+        assert!(
+            capped * 1.25 <= 20.0 + f32::EPSILON,
+            "size {capped} 超出行距预算"
+        );
         let free = fit_font_size(&font, "短句", rect, 200.0);
         assert!(free > capped, "预算充足时不应被压低：{free} vs {capped}");
     }

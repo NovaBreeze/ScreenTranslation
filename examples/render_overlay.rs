@@ -131,7 +131,10 @@ fn main() {
     }
     click_at(&window, 419.0, 428.0);
     assert!(toggled.get(), "切换分段未触发 view-toggled");
-    assert!(overlay.get_show_original(), "切换后 show-original 应为 true");
+    assert!(
+        overlay.get_show_original(),
+        "切换后 show-original 应为 true"
+    );
     render_png(&window, &out("ui-original.png"));
 
     click_at(&window, 523.0, 428.0);

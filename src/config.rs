@@ -220,10 +220,7 @@ fn migrate_legacy_provider(value: &mut toml::Value) {
     };
     let mut provider = toml::map::Map::new();
     provider.insert("name".into(), toml::Value::String(name.to_owned()));
-    provider.insert(
-        "api_base".into(),
-        toml::Value::String(api_base.clone()),
-    );
+    provider.insert("api_base".into(), toml::Value::String(api_base.clone()));
     provider.insert(
         "models".into(),
         toml::Value::Array(vec![toml::Value::String(model)]),

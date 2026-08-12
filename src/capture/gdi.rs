@@ -145,18 +145,17 @@ fn display_info(monitor: HMONITOR, rect: RECT) -> DisplayInfo {
         szDevice: [0; 32],
     };
     info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
-    let device_name = if unsafe { GetMonitorInfoW(monitor, std::ptr::from_mut(&mut info).cast()) }
-        .as_bool()
-    {
-        let end = info
-            .szDevice
-            .iter()
-            .position(|&c| c == 0)
-            .unwrap_or(info.szDevice.len());
-        String::from_utf16_lossy(&info.szDevice[..end])
-    } else {
-        String::new()
-    };
+    let device_name =
+        if unsafe { GetMonitorInfoW(monitor, std::ptr::from_mut(&mut info).cast()) }.as_bool() {
+            let end = info
+                .szDevice
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(info.szDevice.len());
+            String::from_utf16_lossy(&info.szDevice[..end])
+        } else {
+            String::new()
+        };
     DisplayInfo {
         device_name,
         x: rect.left,

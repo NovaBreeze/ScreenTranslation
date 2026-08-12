@@ -66,7 +66,13 @@ impl Translator {
             }
             Self::Chain(chain) => {
                 let mut on_line = on_line;
-                Box::pin(translate_stream_chain(chain, lines, cancellation, &mut on_line)).await
+                Box::pin(translate_stream_chain(
+                    chain,
+                    lines,
+                    cancellation,
+                    &mut on_line,
+                ))
+                .await
             }
         }
     }
@@ -108,7 +114,11 @@ async fn translate_stream_chain(
             break;
         }
         if !failures.is_empty() {
-            tracing::info!(label, remaining = missing.len(), "falling back to next translator");
+            tracing::info!(
+                label,
+                remaining = missing.len(),
+                "falling back to next translator"
+            );
         }
         let sub_lines: Vec<String> = missing.iter().map(|&i| lines[i].clone()).collect();
         let missing_ref = &missing;
@@ -208,11 +218,7 @@ mod tests {
             ("节点B".into(), failing_translator(2)),
         ]);
         let error = chain
-            .translate_stream(
-                &["hello".to_owned()],
-                &CancellationToken::new(),
-                |_, _| {},
-            )
+            .translate_stream(&["hello".to_owned()], &CancellationToken::new(), |_, _| {})
             .await
             .expect_err("all members fail");
         let message = format!("{error:#}");
@@ -254,9 +260,8 @@ mod tests {
                     }
                     buffer.extend_from_slice(&chunk[..read]);
                     if body_range.is_none()
-                        && let Some(pos) = buffer
-                            .windows(4)
-                            .position(|window| window == b"\r\n\r\n")
+                        && let Some(pos) =
+                            buffer.windows(4).position(|window| window == b"\r\n\r\n")
                     {
                         let headers = String::from_utf8_lossy(&buffer[..pos]).to_lowercase();
                         let len = headers
@@ -272,7 +277,9 @@ mod tests {
                     body.len(),
                     body
                 );
-                stream.write_all(response.as_bytes()).expect("write response");
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write response");
             }
         });
         port

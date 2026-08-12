@@ -12,8 +12,8 @@ use windows::Win32::Graphics::Gdi::{
     SelectObject,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, MOUSEEVENTF_LEFTDOWN,
-    MOUSEEVENTF_LEFTUP, MOUSEINPUT, MOUSE_EVENT_FLAGS, SendInput, VIRTUAL_KEY, VK_CONTROL,
+    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, MOUSE_EVENT_FLAGS,
+    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT, SendInput, VIRTUAL_KEY, VK_CONTROL,
     VK_ESCAPE, VK_MENU, VK_T,
 };
 use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
@@ -122,7 +122,11 @@ fn send_keys(down_up: &[(VIRTUAL_KEY, bool)]) {
                 ki: KEYBDINPUT {
                     wVk: vk,
                     wScan: 0,
-                    dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                    dwFlags: if up {
+                        KEYEVENTF_KEYUP
+                    } else {
+                        Default::default()
+                    },
                     time: 0,
                     dwExtraInfo: 0,
                 },
@@ -175,7 +179,10 @@ fn burst(label: &str, frames: usize, interval_ms: u64) {
         let ratio = black_ratio();
         let t = start.elapsed().as_millis();
         let marker = if ratio > 0.5 { "  <== 黑帧" } else { "" };
-        println!("[{label}] frame {i:02} t={t:4}ms black={:.1}%{marker}", ratio * 100.0);
+        println!(
+            "[{label}] frame {i:02} t={t:4}ms black={:.1}%{marker}",
+            ratio * 100.0
+        );
         sleep(Duration::from_millis(interval_ms));
     }
 }
@@ -187,7 +194,10 @@ fn fast_burst(label: &str, frames: usize) {
         let ratio = black_ratio_region(640, 360, 640, 360);
         let t = start.elapsed().as_millis();
         let marker = if ratio > 0.5 { "  <== 黑帧" } else { "" };
-        println!("[{label}] frame {i:03} t={t:4}ms black={:.1}%{marker}", ratio * 100.0);
+        println!(
+            "[{label}] frame {i:03} t={t:4}ms black={:.1}%{marker}",
+            ratio * 100.0
+        );
     }
 }
 

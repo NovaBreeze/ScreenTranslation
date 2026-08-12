@@ -32,7 +32,15 @@ pub fn capture_display_frame(display: &DisplayInfo) -> Result<DynamicImage> {
         display.scale_factor,
     );
     let (x, y) = (display.x, display.y);
-    tracing::info!(device, x, y, width, height, scale, "capturing display frame");
+    tracing::info!(
+        device,
+        x,
+        y,
+        width,
+        height,
+        scale,
+        "capturing display frame"
+    );
 
     // 等 DWM 把挂起的合成请求全部落地：刚移出屏幕的遮罩可能还留在
     // 合成画面里一两帧，直接 BitBlt 会把它冻进新底图（残影）。
@@ -153,11 +161,8 @@ mod probe {
         use slint::ComponentHandle;
         use std::time::{Duration, Instant};
 
-        let red = DynamicImage::ImageRgba8(RgbaImage::from_pixel(
-            1920,
-            1080,
-            Rgba([220, 30, 30, 255]),
-        ));
+        let red =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(1920, 1080, Rgba([220, 30, 30, 255])));
         let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
         let (report_tx, report_rx) = std::sync::mpsc::channel();
         let sampler = std::thread::spawn(move || {
@@ -275,7 +280,11 @@ mod probe {
         let samples: Vec<(u128, f64)> = report_rx.recv().expect("samples");
         sampler.join().ok();
         let black_frames = samples.iter().filter(|(_, r)| *r > 0.5).count();
-        eprintln!("samples = {}, black frames = {}", samples.len(), black_frames);
+        eprintln!(
+            "samples = {}, black frames = {}",
+            samples.len(),
+            black_frames
+        );
         assert_eq!(black_frames, 0, "交互过程不应出现全黑帧");
     }
 }

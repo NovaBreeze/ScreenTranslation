@@ -283,7 +283,8 @@ fn join_fragments(tail: &str, next: &str) -> String {
             '\u{4e00}'..='\u{9fff}' | '\u{3000}'..='\u{303f}' | '\u{ff00}'..='\u{ffef}'
         )
     };
-    let needs_space = !tail.chars().last().is_some_and(cjk) && !next.chars().next().is_some_and(cjk);
+    let needs_space =
+        !tail.chars().last().is_some_and(cjk) && !next.chars().next().is_some_and(cjk);
     if needs_space {
         format!("{tail} {next}")
     } else {
@@ -443,8 +444,7 @@ fn restore_spaces(text: &str, line: &image::GrayImage) -> String {
             continue;
         }
         // 两侧均非 ASCII 字母数字（多为纯中文行的宽字形间隙）时不插入。
-        if !chars[boundary - 1].is_ascii_alphanumeric()
-            && !chars[boundary].is_ascii_alphanumeric()
+        if !chars[boundary - 1].is_ascii_alphanumeric() && !chars[boundary].is_ascii_alphanumeric()
         {
             continue;
         }
@@ -471,7 +471,8 @@ fn restore_spaces(text: &str, line: &image::GrayImage) -> String {
     restored
 }
 
-fn initialize_onnx_runtime() -> Result<()> {    let candidates = [
+fn initialize_onnx_runtime() -> Result<()> {
+    let candidates = [
         std::env::current_exe()
             .ok()
             .and_then(|path| path.parent().map(|parent| parent.join("onnxruntime.dll"))),
@@ -496,8 +497,17 @@ mod tests {
 
     /// 构造二值行图：`runs` 为有墨列区间（rows 4..16），其余为背景。
     /// 墨占比保持 <50%，使 Otsu 墨迹侧判定稳定。
-    fn paint(width: u32, height: u32, runs: &[(usize, usize)], ink_on_dark: bool) -> image::GrayImage {
-        let (bg, ink) = if ink_on_dark { (255u8, 0u8) } else { (0u8, 255u8) };
+    fn paint(
+        width: u32,
+        height: u32,
+        runs: &[(usize, usize)],
+        ink_on_dark: bool,
+    ) -> image::GrayImage {
+        let (bg, ink) = if ink_on_dark {
+            (255u8, 0u8)
+        } else {
+            (0u8, 255u8)
+        };
         let mut img = image::GrayImage::from_pixel(width, height, image::Luma([bg]));
         for &(start, end) in runs {
             for x in start..end {
@@ -567,7 +577,13 @@ mod tests {
         // 终端状态行被切成三截（图标后、大间距处）：应并回一行。
         let blocks = vec![
             block("Launch start: app", 10, 100, 200, 30),
-            block("F:/Workspace/ScreenTranslator/target/re…", 230, 102, 500, 28),
+            block(
+                "F:/Workspace/ScreenTranslator/target/re…",
+                230,
+                102,
+                500,
+                28,
+            ),
             block("· running · pid 16912", 760, 101, 300, 29),
         ];
         let lines = merge_line_fragments(&blocks);
@@ -661,7 +677,10 @@ mod tests {
     #[test]
     fn cjk_neighbors_do_not_gain_spaces() {
         let line = paint(100, 20, GAPPED_RUNS, true);
-        assert_eq!(restore_spaces("你好世界你好世界", &line), "你好世界你好世界");
+        assert_eq!(
+            restore_spaces("你好世界你好世界", &line),
+            "你好世界你好世界"
+        );
     }
 
     #[test]
@@ -731,7 +750,12 @@ mod tests {
             } else {
                 (1600, 760)
             };
-            let crop = frame.crop_imm(10, 100, w.min(frame.width() - 10), h.min(frame.height() - 100));
+            let crop = frame.crop_imm(
+                10,
+                100,
+                w.min(frame.width() - 10),
+                h.min(frame.height() - 100),
+            );
             let started = std::time::Instant::now();
             let blocks = engine.recognize(&crop).expect("ocr").len();
             let (private, ws) = mem_mb();

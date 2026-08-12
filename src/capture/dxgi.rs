@@ -16,9 +16,7 @@ static MANAGER: Mutex<Option<dxgi_capture_rs::DXGIManager>> = Mutex::new(None);
 /// 否则返回 None 让调用方回退 GDI。
 #[cfg(windows)]
 fn output_index_for_device(device_name: &str) -> Option<usize> {
-    use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1,
-    };
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1};
 
     if device_name.is_empty() {
         return None;
@@ -72,8 +70,8 @@ fn widened_to_string(wide: &[u16]) -> String {
 pub fn capture_monitor(device_name: &str) -> Result<DynamicImage> {
     use dxgi_capture_rs::DXGIManager;
 
-    let index = output_index_for_device(device_name)
-        .context("目标显示器不在主适配器上，跳过 DXGI")?;
+    let index =
+        output_index_for_device(device_name).context("目标显示器不在主适配器上，跳过 DXGI")?;
 
     let mut guard = MANAGER.lock().expect("dxgi manager lock");
     if guard.is_none() {
