@@ -108,8 +108,8 @@ impl OpenAiTranslator {
             .collect()
     }
 
-    /// Stream translations. The callback receives the one-based source line
-    /// number and is called only when a complete `<N>` section is available.
+    /// Stream translations. The callback receives the zero-based source line
+    /// index and is called only when a complete `<N>` section is available.
     pub async fn translate_stream<F>(
         &self,
         lines: &[String],
@@ -142,7 +142,7 @@ impl OpenAiTranslator {
                 |_, text| {
                     if aligned[index].is_none() {
                         aligned[index] = Some(text.clone());
-                        on_line(index + 1, text);
+                        on_line(index, text);
                     }
                 },
             )
@@ -178,7 +178,7 @@ impl OpenAiTranslator {
         self.request_stream(lines, cancellation, |index, value| {
             if aligned[index].is_none() {
                 aligned[index] = Some(value.clone());
-                on_line(index + 1, value);
+                on_line(index, value);
             }
         })
         .await

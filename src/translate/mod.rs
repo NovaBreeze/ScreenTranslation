@@ -42,6 +42,8 @@ impl Translator {
         }
     }
 
+    /// 流式翻译。`on_line` 回调收到的是 0-based 行索引（与 `lines` 下标对齐），
+    /// 每个实现（OpenAI / Ollama / Chain）都必须遵守同一约定。
     pub async fn translate_stream<F>(
         &self,
         lines: &[String],
@@ -169,6 +171,8 @@ impl From<OllamaTranslator> for Translator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
 
     fn failing_translator(port: u16) -> Translator {
         OpenAiTranslator::new(
@@ -226,5 +230,85 @@ mod tests {
             .await
             .expect_err("cancelled");
         assert_eq!(format!("{error:#}"), "任务已取消");
+    }
+
+    /// 最小 SSE mock：读完一个请求后回放固定事件流，循环接受后续连接。
+    fn spawn_sse_server(body: &'static str) -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let port = listener.local_addr().expect("local addr").port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = stream.expect("accept");
+                let mut buffer = Vec::new();
+                let mut chunk = [0u8; 4096];
+                let mut body_range = None;
+                loop {
+                    if let Some((start, len)) = body_range
+                        && buffer.len() >= start + len
+                    {
+                        break;
+                    }
+                    let read = stream.read(&mut chunk).expect("read request");
+                    if read == 0 {
+                        break;
+                    }
+                    buffer.extend_from_slice(&chunk[..read]);
+                    if body_range.is_none()
+                        && let Some(pos) = buffer
+                            .windows(4)
+                            .position(|window| window == b"\r\n\r\n")
+                    {
+                        let headers = String::from_utf8_lossy(&buffer[..pos]).to_lowercase();
+                        let len = headers
+                            .lines()
+                            .find_map(|line| line.strip_prefix("content-length:"))
+                            .and_then(|value| value.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
+                        body_range = Some((pos + 4, len));
+                    }
+                }
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).expect("write response");
+            }
+        });
+        port
+    }
+
+    /// 回归：流式回调必须是 0-based 行索引。1-based 时第一行译文会落到
+    /// 第二行槽位（界面上首行重复盖住次行），末行译文越界被丢弃。
+    #[tokio::test]
+    async fn chain_stream_reports_zero_based_indexes_and_aligned_results() {
+        let body = "data: {\"choices\":[{\"delta\":{\"content\":\"<1> 一\\n<2> 二\\n\"}}]}\n\ndata: [DONE]\n\n";
+        let port = spawn_sse_server(body);
+        let chain = Translator::Chain(vec![(
+            "mock".into(),
+            OpenAiTranslator::new(
+                format!("http://127.0.0.1:{port}"),
+                "sk-test",
+                "test-model",
+                "English",
+                None,
+            )
+            .expect("translator should build")
+            .into(),
+        )]);
+        let lines = vec!["one".to_owned(), "two".to_owned()];
+        let mut events = Vec::new();
+        let translated = chain
+            .translate_stream(&lines, &CancellationToken::new(), |index, text| {
+                events.push((index, text));
+            })
+            .await
+            .expect("stream should succeed");
+        assert_eq!(
+            events,
+            vec![(0, "一".to_owned()), (1, "二".to_owned())],
+            "回调索引必须 0-based 且按行序到达"
+        );
+        assert_eq!(translated, vec!["一".to_owned(), "二".to_owned()]);
     }
 }

@@ -85,7 +85,8 @@ impl OllamaTranslator {
         }
     }
 
-    /// Same callback contract as `OpenAiTranslator::translate_stream`.
+    /// Callback contract: zero-based line index, same as
+    /// `OpenAiTranslator::translate_stream`.
     pub async fn translate_stream<F>(
         &self,
         lines: &[String],
@@ -122,7 +123,7 @@ impl OllamaTranslator {
                         |_, text| {
                             if aligned[index].is_none() {
                                 aligned[index] = Some(text.clone());
-                                on_line(index + 1, text);
+                                on_line(index, text);
                             }
                         },
                     )
@@ -191,7 +192,7 @@ impl OllamaTranslator {
         self.request_native_stream(lines, cancellation, |index, text| {
             if aligned[index].is_none() {
                 aligned[index] = Some(text.clone());
-                on_line(index + 1, text);
+                on_line(index, text);
             }
         })
         .await
