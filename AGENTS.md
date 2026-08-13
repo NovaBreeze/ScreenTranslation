@@ -15,6 +15,15 @@
 - 无头 UI 验证：`cargo run --example render_overlay -- probe`
 - 交互冒烟探针：`./target/release/examples/smoke_interact.exe <hotkey|drag|toggle|copy|close|click X Y|esc|shot PATH>`
 
+## 发布检查（每次发版前必过）
+
+- 发版 = 推送才算数：本地 `git commit` 后必须 `git push origin master` + 推送标签，缺一不可。
+- 标签、Release、`Cargo.toml` 三者版本号必须一致；标签推前确认本地与 `origin/master` 无领先提交。
+- CI 的 fmt 步骤用最新 stable rustfmt，与本地旧工具链输出可能不同：发版前先 `rustup update stable`，再 `cargo fmt --all -- --check` 零差异，否则标签 CI 必挂（2026-07-25 起 v0.2.0 周期全红即此因）。
+- 推送标签后必须确认闭环：`gh run list --branch vX.Y.Z` 全绿，且 `gh release view vX.Y.Z` 列出 `*-win64.zip` 资产。CI 红时先修 CI，不要手动传资产掩盖（v0.2.0 曾如此，导致 CI 红了一个周期无人发现）。
+- `ScreenTranslator-Setup.exe` 安装包依赖本机 NSIS（`makensis`），CI 不产；没有 NSIS 就只发 ZIP 并在发布说明注明，新用户首次安装会受影响（自动更新只认 ZIP，不受影响）。
+- 本地工具链升级后首次构建为全量重编译（本机约 10-20 分钟），发版预留时间。
+
 ## 核心约束
 
 - 遮罩出现/交互/关闭不得有任何动画或黑闪；翻译结果直接渲染在原遮罩上，不用独立结果窗口。
