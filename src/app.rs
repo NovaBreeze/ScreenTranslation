@@ -1144,8 +1144,8 @@ fn install_capture_handler(
                     }
                 });
             }
-            // 兜底：离屏渲染被跳过时也能上场（此时底图已在上次 park 时清空，
-            // 即使先上场也只会看到黑底而非旧内容）。
+            // 兜底：离屏渲染被跳过时也能上场。park 时已 hide，
+            // DWM 表面被销毁，即使先上场也只会呈现桌面而非旧内容。
             slint::Timer::single_shot(std::time::Duration::from_millis(400), move || reveal());
         });
     }
@@ -1463,11 +1463,13 @@ fn install_capture_handler(
     *overlay_slot.borrow_mut() = Some(overlay);
 }
 
-/// 把常驻遮罩停到屏幕外：窗口保持映射不销毁，避免 hide/show 的 DWM 过渡黑帧。
-/// 同时清空底图：下次上场若渲染兜底先触发，呈现的是与窗口底色一致的黑，
-/// 而不是上一次的内容（残影）。
+/// 把常驻遮罩停到屏幕外并隐藏：hide 会让 DWM 丢弃窗口表面，
+/// 下次上场没有任何遗留缓冲可呈现——窗口保持映射时，离屏渲染的 present
+/// 可能被驱动/DWM 丢弃（节流），表面残留的上一会话定格画面会在移入
+/// 屏幕的头 1-2 帧被带出来（残影）。同时清空底图属性，双保险。
 fn park_overlay(overlay: &OverlayWindow) {
     overlay.set_frame_image(slint::Image::default());
+    let _ = overlay.hide();
     overlay
         .window()
         .set_position(slint::PhysicalPosition::new(-32000, -32000));
