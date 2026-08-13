@@ -29,6 +29,30 @@ Windows 10/11 截屏翻译工具。支持本地 OCR、DeepSeek/OpenAI 兼容接�
 设置支持 DeepSeek、OpenAI、Ollama 和自定义 OpenAI 兼容服务，可配置代理、开机自启、OCR 预热和低置信度多模态 OCR 兜底。
 应用会从 `NovaBreeze/ScreenTranslation` 的 GitHub Releases 检查更新；设置页可手动检查并安装 Windows x64 ZIP 发布包。
 
+## 安装 / 运行
+
+不要只双击 `target\release\screen-translator.exe`。程序需要 **exe 同目录** 的 `onnxruntime.dll`，以及同目录或当前工作目录下的 `assets\ocr\`。
+
+推荐任选其一：
+
+1. **便携包（推荐）**  
+   解压 `dist\ScreenTranslator-v*-win64.zip`（当前版本 v0.2.1），运行其中的 `ScreenTranslator.exe`。  
+   或从 [GitHub Releases](https://github.com/NovaBreeze/ScreenTranslation/releases) 下载同名 ZIP。
+
+2. **开发运行**（在项目根目录）：
+
+   ```powershell
+   cargo run --release
+   ```
+
+3. **直接跑 release 目录**：先把依赖拷到 exe 旁：
+
+   ```powershell
+   Copy-Item onnxruntime.dll target\release\
+   Copy-Item -Recurse assets target\release\
+   .\target\release\screen-translator.exe
+   ```
+
 ## 构建与分发
 
 ```powershell
