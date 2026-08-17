@@ -81,23 +81,10 @@ pub async fn download_and_schedule(info: &UpdateInfo) -> Result<()> {
     ));
     std::fs::create_dir_all(&update_root).context("创建更新临时目录失败")?;
     let archive = update_root.join("update.zip");
-    let bytes = Client::builder()
+    let client = Client::builder()
         .timeout(Duration::from_secs(180))
-        .build()?
-        .get(&info.download_url)
-        .header(
-            "User-Agent",
-            format!("ScreenTranslator/{}", env!("CARGO_PKG_VERSION")),
-        )
-        .send()
-        .await
-        .context("下载更新失败")?
-        .error_for_status()
-        .context("下载更新返回错误")?
-        .bytes()
-        .await
-        .context("读取更新包失败")?;
-    std::fs::write(&archive, bytes).context("保存更新包失败")?;
+        .build()?;
+    download_with_resume(&client, &info.download_url, &archive).await?;
 
     let script = update_root.join("apply-update.ps1");
     std::fs::write(
@@ -123,6 +110,74 @@ pub async fn download_and_schedule(info: &UpdateInfo) -> Result<()> {
         .spawn()
         .context("启动更新程序失败")?;
     Ok(())
+}
+
+/// 断点续传下载：连接中断时保留已下载字节，下一轮用 Range 续传，最多 5 轮。
+/// 服务器忽略 Range（回 200 而非 206）时截断重下。流干净结束即整包完整
+/// （reqwest 对截断/坏体会报错），最后 rename 成正式文件。
+async fn download_with_resume(client: &Client, url: &str, dest: &Path) -> Result<()> {
+    use futures::StreamExt;
+    use std::io::Write;
+
+    const ATTEMPTS: usize = 5;
+    let part = dest.with_extension("part");
+    let mut downloaded = std::fs::metadata(&part).map(|meta| meta.len()).unwrap_or(0);
+    let mut last_error: Option<anyhow::Error> = None;
+    for attempt in 0..ATTEMPTS {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        let mut request = client.get(url).header(
+            "User-Agent",
+            format!("ScreenTranslator/{}", env!("CARGO_PKG_VERSION")),
+        );
+        if downloaded > 0 {
+            request = request.header("Range", format!("bytes={downloaded}-"));
+        }
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(error) => {
+                last_error = Some(error.into());
+                continue;
+            }
+        };
+        let status = response.status();
+        if !status.is_success() {
+            last_error = Some(anyhow!("下载更新返回错误:{status}"));
+            continue;
+        }
+        let mut file = if downloaded > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+            std::fs::OpenOptions::new().append(true).open(&part)
+        } else {
+            downloaded = 0;
+            std::fs::File::create(&part)
+        }
+        .context("打开更新包临时文件失败")?;
+        let mut stream = response.bytes_stream();
+        let mut failed = false;
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    if let Err(error) = file.write_all(&bytes) {
+                        last_error = Some(error.into());
+                        failed = true;
+                        break;
+                    }
+                    downloaded += bytes.len() as u64;
+                }
+                Err(error) => {
+                    last_error = Some(error.into());
+                    failed = true;
+                    break;
+                }
+            }
+        }
+        if !failed {
+            std::fs::rename(&part, dest).context("更新包落盘失败")?;
+            return Ok(());
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow!("下载更新失败"))).context("读取更新包失败")
 }
 
 fn update_script(pid: u32, archive: &Path, app_dir: &Path, update_root: &Path) -> String {
