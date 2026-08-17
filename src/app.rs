@@ -489,6 +489,18 @@ fn config_from_window(window: &SettingsWindow, previous: &AppConfig) -> Result<A
     Ok(config)
 }
 
+/// 写注册表自启动项。测试构建中为 no-op：单元测试不得改写用户真实的
+/// HKCU Run 键（保存流程测试曾把测试二进制路径写进启动项，破坏真实自启动）。
+#[cfg(not(test))]
+fn sync_autostart(enabled: bool) -> Result<()> {
+    Autostart::for_current_exe("ScreenTranslator")?.set_enabled(enabled)
+}
+
+#[cfg(test)]
+fn sync_autostart(_enabled: bool) -> Result<()> {
+    Ok(())
+}
+
 fn install_save_handler(
     window: &SettingsWindow,
     config: Arc<Mutex<AppConfig>>,
@@ -515,7 +527,7 @@ fn install_save_handler(
             let mut updated = config_from_window(&window, &previous)?;
             updated.providers = providers;
             let hotkey_changed = updated.hotkey != previous.hotkey;
-            Autostart::for_current_exe("ScreenTranslator")?.set_enabled(updated.autostart)?;
+            sync_autostart(updated.autostart)?;
             updated.save()?;
             *config.lock().expect("config lock") = updated.clone();
             // 新输入的 key 已加密并入配置，草稿以落盘结果重建。
@@ -2176,12 +2188,7 @@ mod tests {
             Rc::clone(&drafts),
             Rc::clone(&editing),
         );
-        // 自启动复选框与注册表现状对齐：set_enabled 写入同值，不改变用户设置。
-        if let Ok(autostart) = Autostart::for_current_exe("ScreenTranslator")
-            && let Ok(enabled) = autostart.is_enabled()
-        {
-            window.set_launch_at_login(enabled);
-        }
+        // sync_autostart 在测试构建中为 no-op，不触碰真实注册表，无需对齐。
 
         // 模拟用户：在原配置基础上添加第二个供应商，选中它（字段载入窗口）后保存。
         drafts.borrow_mut().push(ProviderDraft {
